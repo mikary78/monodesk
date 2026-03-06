@@ -1,0 +1,14 @@
+/* index.css — 전역 스타일 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 스크롤바 스타일 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F8FAFC; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* 다크모드 스크롤바 */
+.dark ::-webkit-scrollbar-track { background: #1E293B; }
+.dark ::-webkit-scrollbar-thumb { background: #475569; }
