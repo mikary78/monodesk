@@ -1,0 +1,620 @@
+# ============================================================
+# services/employee_service.py — 직원 관리 비즈니스 로직
+# 직원 CRUD, 출퇴근 관리, 급여 계산(한국 노동법 기준)을 담당합니다.
+#
+# 2026년 기준 적용 법령:
+# - 최저임금: 10,030원/시 (2026년 최저임금위원회 고시)
+# - 주휴수당: 근로기준법 제55조 (주 15시간 이상 시 적용)
+# - 연장근로: 근로기준법 제56조 (1일 8시간, 주 40시간 초과 시 1.5배)
+# - 야간근로: 근로기준법 제56조 (22:00~06:00, 0.5배 가산)
+# - 4대보험: 2026년 요율 기준 (국민연금 4.5%, 건강 3.545%, 고용 0.9%)
+# ============================================================
+
+from sqlalchemy.orm import Session
+from sqlalchemy import func, and_
+from typing import List, Optional, Dict, Any
+from models.employee import Employee, AttendanceRecord, SalaryRecord
+from schemas.employee import (
+    EmployeeCreate, EmployeeUpdate,
+    AttendanceRecordCreate, AttendanceRecordUpdate,
+    SalaryRecordUpdate,
+    SalaryCalculationResult, MonthlySalarySummary
+)
+import math
+
+# ─────────────────────────────────────────
+# 상수 정의 (2026년 법령 기준)
+# ─────────────────────────────────────────
+
+# 2026년 최저임금 (원/시)
+MINIMUM_WAGE_PER_HOUR = 10_030
+
+# 4대보험 근로자 부담 요율
+PENSION_RATE = 0.045          # 국민연금 4.5%
+HEALTH_RATE = 0.03545         # 건강보험 3.545%
+CARE_RATE = 0.1295            # 장기요양보험 (건강보험료의 12.95%)
+EMPLOYMENT_RATE = 0.009       # 고용보험 0.9%
+
+# 1일 기준 근무시간 (초과 시 연장근로)
+DAILY_STANDARD_HOURS = 8.0
+
+# 주 기준 근무시간 (초과 시 주 연장근로)
+WEEKLY_STANDARD_HOURS = 40.0
+
+# 주휴수당 적용 기준 (주 최소 근무시간)
+WEEKLY_HOLIDAY_THRESHOLD = 15.0
+
+# 식사 시간 공제 기준 (8시간 이상 근무 시 1시간 공제)
+BREAK_THRESHOLD_HOURS = 8.0
+BREAK_HOURS = 1.0
+
+
+# ─────────────────────────────────────────
+# 직원 서비스
+# ─────────────────────────────────────────
+
+def get_all_employees(db: Session, include_resigned: bool = False) -> List[Employee]:
+    """
+    직원 목록 조회.
+    include_resigned: True이면 퇴사자 포함, False이면 현직자만 반환
+    """
+    query = db.query(Employee).filter(Employee.is_deleted == 0)
+    if not include_resigned:
+        # 퇴사일이 없거나, 퇴사일이 오늘 이후인 직원만 조회
+        query = query.filter(
+            (Employee.resign_date == None) | (Employee.resign_date == "")
+        )
+    return query.order_by(Employee.name).all()
+
+
+def get_employee_by_id(db: Session, employee_id: int) -> Optional[Employee]:
+    """ID로 직원 단건 조회"""
+    return db.query(Employee).filter(
+        Employee.id == employee_id,
+        Employee.is_deleted == 0
+    ).first()
+
+
+def create_employee(db: Session, data: EmployeeCreate) -> Employee:
+    """새 직원 등록"""
+    employee = Employee(**data.model_dump())
+    db.add(employee)
+    db.commit()
+    db.refresh(employee)
+    return employee
+
+
+def update_employee(db: Session, employee_id: int, data: EmployeeUpdate) -> Optional[Employee]:
+    """직원 정보 수정 (부분 수정 허용)"""
+    employee = get_employee_by_id(db, employee_id)
+    if not employee:
+        return None
+    # None이 아닌 값만 업데이트
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(employee, key, value)
+    db.commit()
+    db.refresh(employee)
+    return employee
+
+
+def delete_employee(db: Session, employee_id: int) -> bool:
+    """직원 소프트 삭제"""
+    employee = get_employee_by_id(db, employee_id)
+    if not employee:
+        return False
+    employee.is_deleted = 1
+    db.commit()
+    return True
+
+
+def update_employee_contract_path(
+    db: Session,
+    employee_id: int,
+    file_path: Optional[str]
+) -> Optional[Employee]:
+    """
+    직원의 근로계약서 파일 경로를 업데이트합니다.
+    파일 삭제 시에는 None을 전달합니다.
+    """
+    employee = get_employee_by_id(db, employee_id)
+    if not employee:
+        return None
+    employee.contract_file_path = file_path
+    db.commit()
+    db.refresh(employee)
+    return employee
+
+
+# ─────────────────────────────────────────
+# 출퇴근 서비스
+# ─────────────────────────────────────────
+
+def get_attendance_list(
+    db: Session,
+    year: int,
+    month: int,
+    employee_id: Optional[int] = None
+) -> List[AttendanceRecord]:
+    """
+    월별 출퇴근 기록 목록 조회.
+    employee_id가 주어지면 해당 직원의 기록만 반환합니다.
+    """
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+
+    query = db.query(AttendanceRecord).filter(
+        AttendanceRecord.is_deleted == 0,
+        AttendanceRecord.work_date >= start_date,
+        AttendanceRecord.work_date < end_date
+    )
+    if employee_id:
+        query = query.filter(AttendanceRecord.employee_id == employee_id)
+
+    return query.order_by(
+        AttendanceRecord.work_date.desc(),
+        AttendanceRecord.employee_id
+    ).all()
+
+
+def get_attendance_by_id(db: Session, attendance_id: int) -> Optional[AttendanceRecord]:
+    """ID로 출퇴근 기록 단건 조회"""
+    return db.query(AttendanceRecord).filter(
+        AttendanceRecord.id == attendance_id,
+        AttendanceRecord.is_deleted == 0
+    ).first()
+
+
+def calculate_work_hours(clock_in: str, clock_out: str) -> Dict[str, float]:
+    """
+    출퇴근 시각으로 근무시간, 연장근로시간, 야간근로시간을 계산합니다.
+    - 근무시간: 출퇴근 차이 - 휴게시간 (8시간 이상 시 1시간 공제)
+    - 연장근로: 1일 8시간 초과분
+    - 야간근로: 22:00~06:00 구간 근무 시간
+    """
+    def time_to_minutes(t: str) -> int:
+        """HH:MM을 분으로 변환"""
+        h, m = map(int, t.split(":"))
+        return h * 60 + m
+
+    in_minutes = time_to_minutes(clock_in)
+    out_minutes = time_to_minutes(clock_out)
+
+    # 자정을 넘기는 경우 처리 (예: 18:00 ~ 02:00)
+    if out_minutes <= in_minutes:
+        out_minutes += 24 * 60
+
+    # 총 근무 시간 (분)
+    total_minutes = out_minutes - in_minutes
+
+    # 8시간(480분) 이상 근무 시 1시간 휴게 공제
+    if total_minutes >= BREAK_THRESHOLD_HOURS * 60:
+        total_minutes -= int(BREAK_HOURS * 60)
+
+    # 실제 근무시간 (시간 단위, 소수점 2자리)
+    work_hours = round(total_minutes / 60, 2)
+
+    # 연장근로 시간 계산 (1일 8시간 초과분)
+    overtime_hours = max(0.0, round(work_hours - DAILY_STANDARD_HOURS, 2))
+
+    # 야간근로 시간 계산 (22:00~06:00 구간)
+    # 22:00 = 1320분, 30:00(=다음날 06:00) = 1800분
+    night_start = 22 * 60        # 1320
+    night_end = (24 + 6) * 60   # 1800
+
+    # 근무 구간과 야간 구간의 교집합 계산
+    overlap_start = max(in_minutes, night_start)
+    overlap_end = min(out_minutes, night_end)
+
+    # 자정 전 야간 구간 (22:00~24:00)도 추가 확인
+    night_minutes = 0
+    if overlap_start < overlap_end:
+        night_minutes += overlap_end - overlap_start
+
+    # 자정을 넘기지 않는 경우, 다음날 00:00~06:00도 확인
+    if out_minutes > 24 * 60:
+        extra_night_end = min(out_minutes - 24 * 60, 6 * 60)
+        if extra_night_end > 0:
+            night_minutes += extra_night_end
+
+    night_hours = round(night_minutes / 60, 2)
+
+    return {
+        "work_hours": work_hours,
+        "overtime_hours": overtime_hours,
+        "night_hours": night_hours
+    }
+
+
+def create_attendance(db: Session, data: AttendanceRecordCreate) -> AttendanceRecord:
+    """
+    출퇴근 기록 생성.
+    출근/퇴근 시각이 모두 있으면 근무시간을 자동 계산합니다.
+    """
+    record_data = data.model_dump()
+
+    # 출퇴근 시각이 모두 있으면 근무시간 자동 계산
+    if data.clock_in and data.clock_out:
+        hours_info = calculate_work_hours(data.clock_in, data.clock_out)
+        record_data["work_hours"] = hours_info["work_hours"]
+        record_data["overtime_hours"] = hours_info["overtime_hours"]
+        record_data["night_hours"] = hours_info["night_hours"]
+
+    record = AttendanceRecord(**record_data)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def update_attendance(
+    db: Session,
+    attendance_id: int,
+    data: AttendanceRecordUpdate
+) -> Optional[AttendanceRecord]:
+    """
+    출퇴근 기록 수정.
+    출퇴근 시각 변경 시 근무시간을 재계산합니다.
+    """
+    record = get_attendance_by_id(db, attendance_id)
+    if not record:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(record, key, value)
+
+    # 출퇴근 시각이 모두 있으면 근무시간 재계산
+    if record.clock_in and record.clock_out:
+        hours_info = calculate_work_hours(record.clock_in, record.clock_out)
+        record.work_hours = hours_info["work_hours"]
+        record.overtime_hours = hours_info["overtime_hours"]
+        record.night_hours = hours_info["night_hours"]
+
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def delete_attendance(db: Session, attendance_id: int) -> bool:
+    """출퇴근 기록 소프트 삭제"""
+    record = get_attendance_by_id(db, attendance_id)
+    if not record:
+        return False
+    record.is_deleted = 1
+    db.commit()
+    return True
+
+
+# ─────────────────────────────────────────
+# 급여 계산 서비스 (한국 노동법 기준)
+# ─────────────────────────────────────────
+
+def _calculate_weekly_holiday_pay(weekly_work_hours: float, hourly_wage: float) -> float:
+    """
+    주휴수당 계산.
+    근거: 근로기준법 제55조, 고용노동부 주휴수당 산정 방식
+    - 조건: 주 15시간 이상 근무
+    - 계산: (주 근무시간 / 40) × 8 × 시급
+    - 최대: 1일분 (8시간 × 시급)
+    """
+    if weekly_work_hours < WEEKLY_HOLIDAY_THRESHOLD:
+        return 0.0
+
+    # 주휴시간 계산 (최대 8시간)
+    weekly_holiday_hours = min(8.0, (weekly_work_hours / 40.0) * 8.0)
+    return round(weekly_holiday_hours * hourly_wage, 0)
+
+
+def _calculate_insurance_deductions(gross_pay: float) -> Dict[str, float]:
+    """
+    4대보험 근로자 공제액 계산 (2026년 요율).
+    - 국민연금: 4.5%
+    - 건강보험: 3.545%
+    - 장기요양보험: 건강보험료 × 12.95%
+    - 고용보험: 0.9%
+    """
+    # 각 공제액을 원 단위 절사 (10원 단위 아님, 원 단위)
+    pension = math.floor(gross_pay * PENSION_RATE)
+    health = math.floor(gross_pay * HEALTH_RATE)
+    care = math.floor(health * CARE_RATE)
+    employment = math.floor(gross_pay * EMPLOYMENT_RATE)
+    total = pension + health + care + employment
+
+    return {
+        "deduction_pension": float(pension),
+        "deduction_health": float(health),
+        "deduction_care": float(care),
+        "deduction_employment": float(employment),
+        "total_deduction": float(total)
+    }
+
+
+def calculate_salary(
+    db: Session,
+    employee_id: int,
+    year: int,
+    month: int
+) -> SalaryCalculationResult:
+    """
+    직원의 월 급여를 계산합니다.
+    - 시급제: 출퇴근 기록 기반으로 기본급/연장/야간/주휴수당 계산
+    - 월급제: 설정된 월급에서 4대보험 공제
+    """
+    # 직원 정보 조회
+    employee = get_employee_by_id(db, employee_id)
+    if not employee:
+        raise ValueError(f"직원을 찾을 수 없습니다. ID: {employee_id}")
+
+    # 해당 월 출퇴근 기록 조회
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+
+    attendance_list = db.query(AttendanceRecord).filter(
+        AttendanceRecord.employee_id == employee_id,
+        AttendanceRecord.is_deleted == 0,
+        AttendanceRecord.work_date >= start_date,
+        AttendanceRecord.work_date < end_date
+    ).all()
+
+    # 근무 집계
+    work_days = len([a for a in attendance_list if a.work_hours and a.work_hours > 0])
+    total_work_hours = sum(a.work_hours or 0 for a in attendance_list)
+    total_overtime_hours = sum(a.overtime_hours or 0 for a in attendance_list)
+    total_night_hours = sum(a.night_hours or 0 for a in attendance_list)
+
+    # 급여 계산
+    if employee.salary_type == "HOURLY":
+        # 시급제 계산
+        hourly_wage = employee.hourly_wage or MINIMUM_WAGE_PER_HOUR
+
+        # 기본급: 정규 근무시간 × 시급
+        regular_hours = total_work_hours - total_overtime_hours
+        base_pay = round(regular_hours * hourly_wage, 0)
+
+        # 연장근로수당: 연장 시간 × 시급 × 1.5배 (단, 기본 1배는 이미 기본급에 포함)
+        # → 가산분만 계산: 연장 시간 × 시급 × 0.5
+        overtime_pay = round(total_overtime_hours * hourly_wage * 0.5, 0)
+
+        # 야간근로수당: 야간 시간 × 시급 × 0.5 (가산분)
+        night_pay = round(total_night_hours * hourly_wage * 0.5, 0)
+
+        # 주휴수당: 주차별 계산 후 합산
+        # 월 전체 근무시간을 4.33주로 나누어 주당 근무시간 추정
+        avg_weekly_hours = total_work_hours / 4.33 if total_work_hours > 0 else 0
+        weekly_holiday_pay = _calculate_weekly_holiday_pay(avg_weekly_hours, hourly_wage)
+        # 월 4주분으로 확장 (정확한 주차별 계산을 위해 4주 기준)
+        weekly_holiday_pay = round(weekly_holiday_pay * 4, 0)
+
+        gross_pay = base_pay + overtime_pay + night_pay + weekly_holiday_pay
+
+        # 최저임금 충족 여부 확인
+        # 주휴수당 포함 시급 환산: gross_pay / (total_work_hours + 주휴시간)
+        effective_hourly = (gross_pay / total_work_hours) if total_work_hours > 0 else hourly_wage
+        minimum_wage_ok = effective_hourly >= MINIMUM_WAGE_PER_HOUR
+
+    else:
+        # 월급제 계산
+        base_pay = employee.monthly_salary or 0
+        overtime_pay = 0.0
+        night_pay = 0.0
+        weekly_holiday_pay = 0.0
+        gross_pay = base_pay
+
+        # 최저임금 확인: 월급 ÷ 209시간(월 기준근로시간) >= 최저시급
+        monthly_standard_hours = 209.0
+        effective_hourly = gross_pay / monthly_standard_hours if gross_pay > 0 else 0
+        minimum_wage_ok = effective_hourly >= MINIMUM_WAGE_PER_HOUR
+
+    # 4대보험 공제 (적용 대상만)
+    deductions = {"deduction_pension": 0.0, "deduction_health": 0.0,
+                  "deduction_care": 0.0, "deduction_employment": 0.0,
+                  "total_deduction": 0.0}
+    if employee.has_insurance:
+        deductions = _calculate_insurance_deductions(gross_pay)
+
+    net_pay = round(gross_pay - deductions["total_deduction"], 0)
+
+    return SalaryCalculationResult(
+        employee_id=employee_id,
+        employee_name=employee.name,
+        year=year,
+        month=month,
+        salary_type=employee.salary_type,
+        work_days=work_days,
+        total_work_hours=round(total_work_hours, 2),
+        total_overtime_hours=round(total_overtime_hours, 2),
+        total_night_hours=round(total_night_hours, 2),
+        base_pay=base_pay,
+        weekly_holiday_pay=weekly_holiday_pay,
+        overtime_pay=overtime_pay,
+        night_pay=night_pay,
+        gross_pay=gross_pay,
+        deduction_pension=deductions["deduction_pension"],
+        deduction_health=deductions["deduction_health"],
+        deduction_care=deductions["deduction_care"],
+        deduction_employment=deductions["deduction_employment"],
+        total_deduction=deductions["total_deduction"],
+        net_pay=net_pay,
+        minimum_wage_ok=minimum_wage_ok,
+        minimum_wage_per_hour=MINIMUM_WAGE_PER_HOUR
+    )
+
+
+def save_salary_record(
+    db: Session,
+    calc_result: SalaryCalculationResult
+) -> SalaryRecord:
+    """
+    계산된 급여를 DB에 저장합니다.
+    이미 해당 월 정산 기록이 있으면 업데이트합니다.
+    """
+    # 기존 정산 기록 확인
+    existing = db.query(SalaryRecord).filter(
+        SalaryRecord.employee_id == calc_result.employee_id,
+        SalaryRecord.year == calc_result.year,
+        SalaryRecord.month == calc_result.month,
+        SalaryRecord.is_deleted == 0
+    ).first()
+
+    salary_data = {
+        "employee_id": calc_result.employee_id,
+        "year": calc_result.year,
+        "month": calc_result.month,
+        "work_days": calc_result.work_days,
+        "total_work_hours": calc_result.total_work_hours,
+        "total_overtime_hours": calc_result.total_overtime_hours,
+        "total_night_hours": calc_result.total_night_hours,
+        "base_pay": calc_result.base_pay,
+        "weekly_holiday_pay": calc_result.weekly_holiday_pay,
+        "overtime_pay": calc_result.overtime_pay,
+        "night_pay": calc_result.night_pay,
+        "gross_pay": calc_result.gross_pay,
+        "deduction_pension": calc_result.deduction_pension,
+        "deduction_health": calc_result.deduction_health,
+        "deduction_care": calc_result.deduction_care,
+        "deduction_employment": calc_result.deduction_employment,
+        "total_deduction": calc_result.total_deduction,
+        "net_pay": calc_result.net_pay,
+    }
+
+    if existing:
+        # 기존 기록 업데이트
+        for key, value in salary_data.items():
+            setattr(existing, key, value)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        # 새 기록 생성
+        record = SalaryRecord(**salary_data)
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return record
+
+
+def get_salary_records(
+    db: Session,
+    year: int,
+    month: int,
+    employee_id: Optional[int] = None
+) -> List[SalaryRecord]:
+    """월별 급여 정산 기록 목록 조회"""
+    query = db.query(SalaryRecord).filter(
+        SalaryRecord.year == year,
+        SalaryRecord.month == month,
+        SalaryRecord.is_deleted == 0
+    )
+    if employee_id:
+        query = query.filter(SalaryRecord.employee_id == employee_id)
+    return query.all()
+
+
+def update_salary_record(
+    db: Session,
+    salary_id: int,
+    data: SalaryRecordUpdate
+) -> Optional[SalaryRecord]:
+    """급여 정산 기록 수정 (지급 완료 처리 등)"""
+    record = db.query(SalaryRecord).filter(
+        SalaryRecord.id == salary_id,
+        SalaryRecord.is_deleted == 0
+    ).first()
+    if not record:
+        return None
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(record, key, value)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def get_monthly_salary_summary(
+    db: Session,
+    year: int,
+    month: int
+) -> MonthlySalarySummary:
+    """
+    월별 전체 급여 현황 요약.
+    총 지급액, 공제액, 실수령액, 지급 현황을 집계합니다.
+    """
+    records = get_salary_records(db, year, month)
+
+    total_employees = len(records)
+    total_gross_pay = sum(r.gross_pay or 0 for r in records)
+    total_deduction = sum(r.total_deduction or 0 for r in records)
+    total_net_pay = sum(r.net_pay or 0 for r in records)
+    paid_count = sum(1 for r in records if r.is_paid)
+    unpaid_count = total_employees - paid_count
+
+    # 직원별 상세 내역 (이름 포함)
+    salary_details = []
+    for record in records:
+        employee = get_employee_by_id(db, record.employee_id)
+        salary_details.append({
+            "salary_id": record.id,
+            "employee_id": record.employee_id,
+            "employee_name": employee.name if employee else "알 수 없음",
+            "position": employee.position if employee else "",
+            "employment_type": employee.employment_type if employee else "",
+            "work_days": record.work_days,
+            "total_work_hours": record.total_work_hours,
+            "gross_pay": record.gross_pay,
+            "total_deduction": record.total_deduction,
+            "net_pay": record.net_pay,
+            "is_paid": record.is_paid,
+            "paid_date": record.paid_date,
+        })
+
+    return MonthlySalarySummary(
+        year=year,
+        month=month,
+        total_employees=total_employees,
+        total_gross_pay=total_gross_pay,
+        total_deduction=total_deduction,
+        total_net_pay=total_net_pay,
+        paid_count=paid_count,
+        unpaid_count=unpaid_count,
+        salary_details=salary_details
+    )
+
+
+def get_salary_history(
+    db: Session,
+    employee_id: int
+) -> List[dict]:
+    """
+    특정 직원의 전체 급여 지급 이력 조회.
+    연도/월 역순으로 정렬하여 반환합니다.
+    """
+    employee = get_employee_by_id(db, employee_id)
+    if not employee:
+        raise ValueError(f"직원을 찾을 수 없습니다. ID: {employee_id}")
+
+    records = db.query(SalaryRecord).filter(
+        SalaryRecord.employee_id == employee_id,
+        SalaryRecord.is_deleted == 0
+    ).order_by(
+        SalaryRecord.year.desc(),
+        SalaryRecord.month.desc()
+    ).all()
+
+    history = []
+    for record in records:
+        history.append({
+            "salary_id": record.id,
+            "year": record.year,
+            "month": record.month,
+            "work_days": record.work_days,
+            "total_work_hours": record.total_work_hours,
+            "gross_pay": record.gross_pay,
+            "total_deduction": record.total_deduction,
+            "net_pay": record.net_pay,
+            "is_paid": record.is_paid,
+            "paid_date": record.paid_date,
+            "memo": record.memo,
+        })
+
+    return history
