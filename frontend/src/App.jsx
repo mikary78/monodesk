@@ -10,7 +10,10 @@ import AccountingPage from "./pages/AccountingPage";
 import SalesAnalysisPage from "./pages/SalesAnalysisPage";
 import InventoryPage from "./pages/InventoryPage";
 import MenuPage from "./pages/MenuPage";
+import EmployeePage from "./pages/EmployeePage";
+import CorporatePage from "./pages/CorporatePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
+import OperationsPage from "./pages/OperationsPage";
 
 const App = () => {
   return (
@@ -28,11 +31,20 @@ const App = () => {
 
         {/* 3순위 — 재고/발주 관리 (구현 완료) */}
         <Route path="/inventory"  element={<InventoryPage />} />
+
         {/* 4순위 — 메뉴 관리 (구현 완료) */}
         <Route path="/menu"       element={<MenuPage />} />
-        <Route path="/employee"   element={<ComingSoonPage />} />
-        <Route path="/corporate"  element={<ComingSoonPage />} />
-        <Route path="/operations" element={<ComingSoonPage />} />
+
+        {/* 5순위 — 직원 관리 (구현 완료) */}
+        <Route path="/employee"   element={<EmployeePage />} />
+
+        {/* 7순위 — 법인 관리 (구현 완료) */}
+        <Route path="/corporate"  element={<CorporatePage />} />
+
+        {/* 8순위 — 운영 관리 (구현 완료) */}
+        <Route path="/operations" element={<OperationsPage />} />
+
+        {/* 설정 (미구현) */}
         <Route path="/settings"   element={<ComingSoonPage />} />
 
         {/* 404 처리 */}
