@@ -13,6 +13,7 @@
 - Step 3: 재고/발주 — `/inventory`
 - Step 4: 메뉴 관리 — `/menu`
 - Step 5: 직원 관리 — `/employee` (브랜치: feature/employee-management)
+- Step 6: 대시보드 — `/dashboard` (단일 API 집계 방식, 신규 DB 모델 없음)
 
 ## 백엔드 패턴 (반드시 일관성 유지)
 - Pydantic V2: `@field_validator`, `ConfigDict`, `.model_dump()`
@@ -49,6 +50,14 @@
 - 파일 업로드: `backend/uploads/contracts/{employee_id}/` 에 저장 (PDF/JPG/PNG, 10MB 제한)
 - FormData 업로드 시 Content-Type 헤더 생략 필수 (브라우저 자동 처리)
 - 급여 정산: UNIQUE(employee_id, year, month) 제약으로 월 1회만 저장, upsert 방식 처리
+
+## 대시보드 모듈 특이사항
+- DB 모델 없음 (신규 테이블 생성 없이 기존 모델 집계만 수행)
+- 단일 엔드포인트: `GET /api/dashboard/summary?year=&month=`
+- 직원 재직 여부: `Employee.resign_date IS NULL` = 재직 중 (is_resigned 컬럼 없음)
+- 급여 실수령액 컬럼: `SalaryRecord.net_pay` (net_salary 아님)
+- 재고 최소기준 컬럼: `InventoryItem.min_quantity` (minimum_quantity 아님)
+- 매출 데이터 출처: `sales_records` 테이블 (세무/회계 모듈 입력값 기반)
 
 ## 메뉴 관리 모듈 특이사항
 - 구성 재료 추가/수정/삭제 시 메뉴 원가 자동 재계산 (_recalculate_menu_cost)
