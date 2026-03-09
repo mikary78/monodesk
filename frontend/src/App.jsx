@@ -13,6 +13,7 @@ import MenuPage from "./pages/MenuPage";
 import EmployeePage from "./pages/EmployeePage";
 import CorporatePage from "./pages/CorporatePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
+import OperationsPage from "./pages/OperationsPage";
 
 const App = () => {
   return (
@@ -40,8 +41,10 @@ const App = () => {
         {/* 7순위 — 법인 관리 (구현 완료) */}
         <Route path="/corporate"  element={<CorporatePage />} />
 
-        {/* 미구현 페이지 */}
-        <Route path="/operations" element={<ComingSoonPage />} />
+        {/* 8순위 — 운영 관리 (구현 완료) */}
+        <Route path="/operations" element={<OperationsPage />} />
+
+        {/* 설정 (미구현) */}
         <Route path="/settings"   element={<ComingSoonPage />} />
 
         {/* 404 처리 */}

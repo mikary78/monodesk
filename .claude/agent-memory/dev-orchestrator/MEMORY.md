@@ -7,7 +7,7 @@
 - 마이그레이션: `backend/migrations/`
 - 변경 이력: `history/`
 
-## 완료된 모듈 (2026-03-09 기준)
+## 완료된 모듈 (2026-03-09 기준) — 전체 8개 모두 완료
 - Step 1: 세무/회계 — `/accounting`
 - Step 2: 매출 분석 — `/sales`
 - Step 3: 재고/발주 — `/inventory`
@@ -15,6 +15,7 @@
 - Step 5: 직원 관리 — `/employee` (브랜치: feature/employee-management)
 - Step 6: 대시보드 — `/dashboard` (단일 API 집계 방식, 신규 DB 모델 없음)
 - Step 7: 법인 관리 — `/corporate` (4탭: 재무개요/동업자/배당/법인비용)
+- Step 8: 운영 관리 — `/operations` (4탭: 공지사항/위생점검/영업일관리/업무체크리스트)
 
 ## 백엔드 패턴 (반드시 일관성 유지)
 - Pydantic V2: `@field_validator`, `ConfigDict`, `.model_dump()`
@@ -73,3 +74,13 @@
 - 카테고리에 메뉴가 있으면 삭제 불가 (ValueError 발생)
 - 원가율 경고 기준: 70% 초과 (빨강), 50-70% (노랑), 30-50% (파랑), 0-30% (초록)
 - seed_default_categories: 제철해산물 주점 맞춤 6개 카테고리 자동 생성
+
+## 운영 관리 모듈 특이사항
+- DB 테이블 6개: notices, hygiene_checklists, hygiene_records, business_days, task_checklists, task_records
+- 위생점검/업무체크 모두 upsert 방식: (date, item_id) 조합 중복 시 업데이트
+- business_days: UNIQUE(business_date) 제약 — 하루 1개 기록만 허용
+- 시드 함수 멱등성 보장: 기존 항목 count > 0이면 건너뜀
+- 기본 시드 데이터: 위생 점검 20개 항목 (개점/마감/일상 × 주방/홀/화장실/설비)
+- 기본 시드 데이터: 업무 체크리스트 18개 항목 (개점6/마감5/주간4/월간3)
+- BusinessCalendar: year/month props를 부모(OperationsPage)에서 받아 월 네비게이터와 연동
+- 긴급 공지(urgent)는 자동으로 is_pinned=1 처리 (서비스 레이어)

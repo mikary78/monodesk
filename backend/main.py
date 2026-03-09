@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import create_tables
-from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate
+from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,6 +46,7 @@ app.include_router(inventory.router, prefix="/api/inventory", tags=["재고/발�
 app.include_router(menu.router, prefix="/api/menu", tags=["메뉴 관리"])
 app.include_router(employee.router, prefix="/api/employee", tags=["직원 관리"])
 app.include_router(corporate.router, prefix="/api/corporate", tags=["법인 관리"])
+app.include_router(operations.router, prefix="/api/operations", tags=["운영 관리"])
 
 
 
