@@ -9,6 +9,7 @@ import DashboardPage from "./pages/DashboardPage";
 import AccountingPage from "./pages/AccountingPage";
 import SalesAnalysisPage from "./pages/SalesAnalysisPage";
 import InventoryPage from "./pages/InventoryPage";
+import MenuPage from "./pages/MenuPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 
 const App = () => {
@@ -27,7 +28,8 @@ const App = () => {
 
         {/* 3순위 — 재고/발주 관리 (구현 완료) */}
         <Route path="/inventory"  element={<InventoryPage />} />
-        <Route path="/menu"       element={<ComingSoonPage />} />
+        {/* 4순위 — 메뉴 관리 (구현 완료) */}
+        <Route path="/menu"       element={<MenuPage />} />
         <Route path="/employee"   element={<ComingSoonPage />} />
         <Route path="/corporate"  element={<ComingSoonPage />} />
         <Route path="/operations" element={<ComingSoonPage />} />

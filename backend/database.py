@@ -59,4 +59,5 @@ def create_tables():
     import models.accounting  # noqa: F401
     import models.sales_analysis  # noqa: F401
     import models.inventory  # noqa: F401 — 재고/발주 모델
+    import models.menu       # noqa: F401 — 메뉴 관리 모델
     Base.metadata.create_all(bind=engine)
