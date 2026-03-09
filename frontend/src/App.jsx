@@ -11,6 +11,7 @@ import SalesAnalysisPage from "./pages/SalesAnalysisPage";
 import InventoryPage from "./pages/InventoryPage";
 import MenuPage from "./pages/MenuPage";
 import EmployeePage from "./pages/EmployeePage";
+import CorporatePage from "./pages/CorporatePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 
 const App = () => {
@@ -36,8 +37,10 @@ const App = () => {
         {/* 5순위 — 직원 관리 (구현 완료) */}
         <Route path="/employee"   element={<EmployeePage />} />
 
+        {/* 7순위 — 법인 관리 (구현 완료) */}
+        <Route path="/corporate"  element={<CorporatePage />} />
+
         {/* 미구현 페이지 */}
-        <Route path="/corporate"  element={<ComingSoonPage />} />
         <Route path="/operations" element={<ComingSoonPage />} />
         <Route path="/settings"   element={<ComingSoonPage />} />
 

@@ -14,6 +14,7 @@
 - Step 4: 메뉴 관리 — `/menu`
 - Step 5: 직원 관리 — `/employee` (브랜치: feature/employee-management)
 - Step 6: 대시보드 — `/dashboard` (단일 API 집계 방식, 신규 DB 모델 없음)
+- Step 7: 법인 관리 — `/corporate` (4탭: 재무개요/동업자/배당/법인비용)
 
 ## 백엔드 패턴 (반드시 일관성 유지)
 - Pydantic V2: `@field_validator`, `ConfigDict`, `.model_dump()`
@@ -58,6 +59,14 @@
 - 급여 실수령액 컬럼: `SalaryRecord.net_pay` (net_salary 아님)
 - 재고 최소기준 컬럼: `InventoryItem.min_quantity` (minimum_quantity 아님)
 - 매출 데이터 출처: `sales_records` 테이블 (세무/회계 모듈 입력값 기반)
+
+## 법인 관리 모듈 특이사항
+- 동업자 기본 구성: 4명 (29/29/29/13%) — seed_default_partners로 초기화
+- 배당 기록: UNIQUE(year, partner_id) 제약, 동일 연도 upsert 방식 처리
+- 배당 이력 보존: partner_name, equity_ratio_snapshot 스냅샷 컬럼으로 변경/삭제 후에도 이력 유지
+- 재무 개요: 세무/회계 모듈(sales_records, expense_records)과 corporate_expenses를 JOIN 없이 별도 집계
+- 법인 비용 분류: 세무사비/법인보험료/법인등기비/상표특허비/법인통신비/법인차량비/임원급여/기타
+- 동업자 지분율 합계 100% 초과 시 ValueError 발생 (create/update 모두 검증)
 
 ## 메뉴 관리 모듈 특이사항
 - 구성 재료 추가/수정/삭제 시 메뉴 원가 자동 재계산 (_recalculate_menu_cost)
