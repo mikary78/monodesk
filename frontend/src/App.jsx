@@ -8,6 +8,7 @@ import Layout from "./components/layout/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import AccountingPage from "./pages/AccountingPage";
 import SalesAnalysisPage from "./pages/SalesAnalysisPage";
+import InventoryPage from "./pages/InventoryPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 
 const App = () => {
@@ -23,7 +24,9 @@ const App = () => {
 
         {/* 2순위 — 매출 분석 (구현 완료) */}
         <Route path="/sales"      element={<SalesAnalysisPage />} />
-        <Route path="/inventory"  element={<ComingSoonPage />} />
+
+        {/* 3순위 — 재고/발주 관리 (구현 완료) */}
+        <Route path="/inventory"  element={<InventoryPage />} />
         <Route path="/menu"       element={<ComingSoonPage />} />
         <Route path="/employee"   element={<ComingSoonPage />} />
         <Route path="/corporate"  element={<ComingSoonPage />} />
