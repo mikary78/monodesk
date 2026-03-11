@@ -72,23 +72,23 @@
 git clone https://github.com/MonoBound/MonoDesk.git
 cd MonoDesk
 
-# 2. 백엔드 실행
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+# 2. 의존성 설치
+cd backend && pip install -r requirements.txt && cd ..
+cd frontend && npm install && npm run build && cd ..
 
-# 3. 새 터미널에서 프론트엔드 실행
-cd frontend
-npm install
-npm run dev
+# 3. 서버 실행 (백엔드 하나만 실행하면 됩니다)
+cd backend
+uvicorn main:app --port 8000
 ```
+
+또는 프로젝트 루트의 `start.bat`을 더블클릭하면 자동으로 실행됩니다.
 
 ### 접속
 
-브라우저에서 아래 주소로 접속합니다.
+브라우저에서 아래 주소 하나만 사용합니다.
 
 ```
-http://localhost:5173
+http://localhost:8000
 ```
 
 API 문서 (Swagger UI):
@@ -96,6 +96,9 @@ API 문서 (Swagger UI):
 ```
 http://localhost:8000/docs
 ```
+
+> **참고**: 프론트엔드와 백엔드가 단일 서버(포트 8000)로 통합되어 있습니다.
+> 코드 수정 후에는 `frontend/` 폴더에서 `npm run build`를 다시 실행하세요.
 
 ---
 
@@ -128,6 +131,10 @@ MonoDesk/
 ├── backup/                     # 백업 파일
 ├── uploads/                    # 업로드 파일 (영수증, 문서 등)
 │
+├── database/                   # SQLite 데이터 파일
+│   └── monodesk.db
+│
+├── start.bat                   # 원클릭 실행 파일 (더블클릭으로 서버 시작)
 ├── .claude/                    # Claude Code 에이전트 설정
 ├── PRD.md                      # 제품 요구사항 문서
 ├── DEVPLAN.md                  # 개발 계획서
