@@ -5,7 +5,7 @@
 # ============================================================
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, UniqueConstraint
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -48,8 +48,8 @@ class Partner(Base):
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
 
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<Partner(id={self.id}, name={self.name}, equity={self.equity_ratio}%)>"
@@ -98,8 +98,8 @@ class DividendRecord(Base):
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
 
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 연도+동업자 고유 제약 (동일 연도에 동일 동업자 배당은 1건)
     __table_args__ = (
@@ -154,8 +154,8 @@ class CorporateExpense(Base):
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
 
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<CorporateExpense(id={self.id}, date={self.expense_date}, amount={self.amount})>"

@@ -5,7 +5,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -63,8 +63,8 @@ class Employee(Base):
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
 
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 관계 정의
     attendance_records = relationship("AttendanceRecord", back_populates="employee")
@@ -111,8 +111,8 @@ class AttendanceRecord(Base):
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
 
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 관계 정의
     employee = relationship("Employee", back_populates="attendance_records")
@@ -194,8 +194,8 @@ class SalaryRecord(Base):
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
 
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 관계 정의
     employee = relationship("Employee", back_populates="salary_records")

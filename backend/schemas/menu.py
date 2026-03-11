@@ -194,7 +194,9 @@ class MenuCostAnalysisResponse(BaseModel):
     top_margin_items: List[dict]
     # 원가율 높은 순 상위 10개 (저마진 / 개선 필요)
     high_cost_items: List[dict]
-    # 평균 원가율
+    # 평균 원가율 (원가 등록된 메뉴만 포함, 원가=0 제외)
     avg_cost_ratio: float
-    # 가중 평균 원가율 (판매가 기준)
+    # 근사 가중 평균 원가율 (판매가 기준 가중치 — 판매 수량 데이터 미연동 상태에서의 근사값)
     weighted_avg_cost_ratio: float
+    # 원가 미등록 메뉴 수 (cost == 0 인 메뉴, 분석 대상에서 제외됨)
+    cost_unregistered_count: int = 0

@@ -190,8 +190,8 @@ const DashboardPage = () => {
         </div>
       )}
 
-      {/* ─── 1행: KPI 카드 4개 ─── */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      {/* ─── 1행: KPI 카드 4개 — 반응형: 1열→2열→4열 ─── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {/* 이번 달 매출 */}
         <KpiCard
           icon={<DollarSign size={20} className="text-blue-500" />}

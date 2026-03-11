@@ -184,9 +184,10 @@ def adjust_quantity(
 ) -> InventoryAdjustment:
     """
     재고 수량 조정 처리.
-    - 입고: 현재 수량 증가
-    - 출고/폐기: 현재 수량 감소
-    - 실사조정: quantity_change를 절대값으로 설정 (양수이면 증가, 음수이면 감소)
+    - 입고: 현재 수량 증가 (quantity_change 만큼 증감)
+    - 출고/폐기: 현재 수량 감소 (quantity_change 만큼 증감)
+    - 실사조정: 목표 수량을 절대값으로 설정 (quantity_change = 최종 재고 목표치)
+      예) 현재 재고 10개 → 실사 결과 7개면 quantity_change=7 입력 → 재고 7개로 확정
     """
     item = get_item_by_id(db, data.item_id)
     if not item:
@@ -195,8 +196,14 @@ def adjust_quantity(
     # 조정 전 수량 기록
     quantity_before = item.current_quantity
 
-    # 수량 변동 적용
-    new_quantity = quantity_before + data.quantity_change
+    # 조정 유형에 따른 수량 계산
+    if data.adjustment_type == "실사조정":
+        # 실사조정: quantity_change를 목표 재고 수량(절대값)으로 설정
+        # quantity_change에는 실사 확인 후 확정된 수량을 직접 입력
+        new_quantity = data.quantity_change
+    else:
+        # 입고/출고/폐기: 현재 수량에서 증감
+        new_quantity = quantity_before + data.quantity_change
 
     # 음수 재고 방지
     if new_quantity < 0:
@@ -424,9 +431,16 @@ def receive_order(
         if received_qty <= 0:
             continue  # 입고 수량이 0이면 스킵
 
-        # 실제 입고 수량 및 단가 업데이트
+        # 실제 입고 수량 기록
         order_item.received_quantity = received_qty
+
+        # 실제 입고 단가 처리:
+        # actual_price가 있으면 발주 단가를 실제 단가로 갱신 후 총액 계산
+        # (발주 시 단가와 실제 납품 단가가 다를 수 있으므로 반드시 갱신 필요)
         actual_price = receive_item.unit_price or order_item.unit_price
+        if receive_item.unit_price:
+            # 실제 단가가 입력된 경우 발주 품목 단가를 갱신
+            order_item.unit_price = actual_price
 
         # 재고 품목 수량 증가
         inventory_item = get_item_by_id(db, order_item.item_id)
@@ -436,7 +450,7 @@ def receive_order(
         quantity_before = inventory_item.current_quantity
         inventory_item.current_quantity += received_qty
 
-        # 입고 이력 생성
+        # 입고 이력 생성 (갱신된 실제 단가 기준으로 기록)
         adjustment = InventoryAdjustment(
             item_id=order_item.item_id,
             adjustment_type="입고",
@@ -456,7 +470,7 @@ def receive_order(
     if data.memo:
         order.memo = (order.memo or "") + f"\n입고메모: {data.memo}"
 
-    # 총 입고 금액 재계산
+    # 총 입고 금액 재계산 (단가 갱신 후 order_item.unit_price 기준으로 계산)
     order.total_amount = sum(
         oi.received_quantity * oi.unit_price
         for oi in order.order_items

@@ -138,8 +138,8 @@ const InventoryPage = () => {
         </button>
       </div>
 
-      {/* KPI 요약 카드 4개 */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* KPI 요약 카드 4개 — 반응형: 1열→2열→4열 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {summaryLoading ? (
           // 스켈레톤 로딩
           [...Array(4)].map((_, i) => (

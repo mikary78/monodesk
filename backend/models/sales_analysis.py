@@ -4,7 +4,7 @@
 # ============================================================
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -29,8 +29,8 @@ class PosImport(Base):
     # 데이터 시작일 / 종료일
     date_from = Column(String(10), nullable=True, comment="데이터 시작일 (YYYY-MM-DD)")
     date_to = Column(String(10), nullable=True, comment="데이터 종료일 (YYYY-MM-DD)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<PosImport(id={self.id}, file={self.file_name}, rows={self.row_count})>"
@@ -72,19 +72,20 @@ class PosSalesRaw(Base):
     is_cancelled = Column(Boolean, default=False, comment="취소 여부")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<PosSalesRaw(id={self.id}, date={self.sale_date}, menu={self.menu_name}, price={self.total_price})>"
 
 
-class MenuItem(Base):
+class PosMenuItem(Base):
     """
-    메뉴 마스터 테이블.
+    POS 메뉴 마스터 테이블.
     POS 데이터에서 자동 생성되거나 수동으로 등록한 메뉴 정보입니다.
+    menu.py의 MenuItem(메뉴 관리 모듈)과 구분하기 위해 별도 테이블로 분리합니다.
     """
-    __tablename__ = "menu_items"
+    __tablename__ = "pos_menu_items"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     # 메뉴명 (고유)
@@ -101,8 +102,8 @@ class MenuItem(Base):
     is_active = Column(Boolean, default=True, comment="활성 메뉴 여부")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     @property
     def margin_rate(self) -> float:
@@ -131,8 +132,8 @@ class SalesTarget(Base):
     target_amount = Column(Float, nullable=False, comment="목표 매출액 (원)")
     # 메모
     memo = Column(String(200), nullable=True, comment="메모")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<SalesTarget(year={self.year}, month={self.month}, target={self.target_amount})>"

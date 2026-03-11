@@ -5,7 +5,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -27,8 +27,8 @@ class MenuCategory(Base):
     sort_order = Column(Integer, default=0, comment="정렬 순서")
     # 소프트 삭제 (0: 정상, 1: 삭제)
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 메뉴 아이템과의 관계
     menu_items = relationship("MenuItem", back_populates="category")
@@ -65,8 +65,8 @@ class MenuItem(Base):
     is_featured = Column(Integer, default=0, comment="대표 메뉴 여부 (0: 일반, 1: 대표)")
     # 소프트 삭제 (0: 정상, 1: 삭제)
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 카테고리와의 관계
     category = relationship("MenuCategory", back_populates="menu_items")
@@ -123,8 +123,8 @@ class MenuIngredient(Base):
     unit = Column(String(20), default="g", comment="단위")
     # 단가 (원/단위) — 재고 연동 시 자동 계산, 미연동 시 직접 입력
     unit_price = Column(Float, default=0, comment="단가 (원/단위)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 메뉴 아이템과의 관계
     menu_item = relationship("MenuItem", back_populates="ingredients")

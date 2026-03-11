@@ -300,6 +300,22 @@ def get_salary_records(
     return service.get_salary_records(db, year, month, employee_id)
 
 
+@router.get("/salary/history")
+def get_salary_history(
+    employee_id: int = Query(..., description="직원 ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    특정 직원의 전체 급여 지급 이력 조회.
+    연도/월 순으로 정렬하여 반환합니다.
+    고정 경로(/salary/history)를 동적 경로(/salary/{salary_id})보다 반드시 먼저 등록해야 합니다.
+    """
+    try:
+        return service.get_salary_history(db, employee_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"급여 이력 조회 중 오류가 발생했습니다: {str(e)}")
+
+
 @router.put("/salary/{salary_id}", response_model=SalaryRecordResponse)
 def update_salary_record(
     salary_id: int,
@@ -311,18 +327,3 @@ def update_salary_record(
     if not result:
         raise HTTPException(status_code=404, detail="해당 급여 정산 기록을 찾을 수 없습니다.")
     return result
-
-
-@router.get("/salary/history")
-def get_salary_history(
-    employee_id: int = Query(..., description="직원 ID"),
-    db: Session = Depends(get_db)
-):
-    """
-    특정 직원의 전체 급여 지급 이력 조회.
-    연도/월 순으로 정렬하여 반환합니다.
-    """
-    try:
-        return service.get_salary_history(db, employee_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"급여 이력 조회 중 오류가 발생했습니다: {str(e)}")

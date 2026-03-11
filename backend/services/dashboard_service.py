@@ -9,6 +9,7 @@ from typing import List
 from datetime import date
 
 from models.accounting import ExpenseCategory, ExpenseRecord, SalesRecord
+from models.sales_analysis import PosSalesRaw
 from models.inventory import InventoryItem, PurchaseOrder
 from models.employee import Employee, SalaryRecord
 
@@ -37,9 +38,15 @@ def _get_date_range(year: int, month: int) -> tuple[str, str]:
 
 def _get_total_sales(db: Session, start: str, end: str) -> float:
     """
-    특정 기간의 총 매출(현금+카드+배달)을 집계합니다.
+    특정 기간의 총 매출을 수동 입력과 POS 원본 데이터를 합산하여 집계합니다.
+
+    이중 계산 방지 규칙:
+    - SalesRecord: is_pos_synced == 0 (수동 입력)만 포함
+      is_pos_synced == 1 은 이미 POS 데이터를 반영한 것으로 PosSalesRaw와 중복이므로 제외
+    - PosSalesRaw: 취소되지 않은 레코드의 total_price 합산
     """
-    result = db.query(
+    # 수동 입력 매출만 집계 (POS 연동 기록 제외)
+    manual_result = db.query(
         func.coalesce(
             func.sum(
                 SalesRecord.cash_amount
@@ -50,10 +57,24 @@ def _get_total_sales(db: Session, start: str, end: str) -> float:
         ).label("total")
     ).filter(
         SalesRecord.is_deleted == 0,
+        SalesRecord.is_pos_synced == 0,
         SalesRecord.sales_date >= start,
         SalesRecord.sales_date < end,
     ).first()
-    return float(result.total or 0)
+    manual_total = float(manual_result.total or 0)
+
+    # POS 원본 매출 집계 (취소 제외)
+    pos_result = db.query(
+        func.coalesce(func.sum(PosSalesRaw.total_price), 0).label("pos_total")
+    ).filter(
+        PosSalesRaw.is_deleted == 0,
+        PosSalesRaw.is_cancelled == False,
+        PosSalesRaw.sale_date >= start,
+        PosSalesRaw.sale_date < end,
+    ).first()
+    pos_total = float(pos_result.pos_total or 0)
+
+    return manual_total + pos_total
 
 
 def _get_total_expense(db: Session, start: str, end: str) -> float:

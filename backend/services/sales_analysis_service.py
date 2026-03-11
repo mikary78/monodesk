@@ -10,7 +10,7 @@ from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, text
-from models.sales_analysis import PosImport, PosSalesRaw, MenuItem, SalesTarget
+from models.sales_analysis import PosImport, PosSalesRaw, PosMenuItem, SalesTarget
 from schemas.sales_analysis import (
     PosImportResult,
     SalesTrendResponse, TrendDataPoint,
@@ -779,21 +779,21 @@ def _get_payment_monthly_trend(
 # 메뉴 마스터 서비스
 # ─────────────────────────────────────────
 
-def get_menu_items(db: Session, active_only: bool = True) -> List[MenuItem]:
+def get_menu_items(db: Session, active_only: bool = True) -> List[PosMenuItem]:
     """메뉴 마스터 목록 조회"""
-    query = db.query(MenuItem).filter(MenuItem.is_deleted == 0)
+    query = db.query(PosMenuItem).filter(PosMenuItem.is_deleted == 0)
     if active_only:
-        query = query.filter(MenuItem.is_active == True)
-    return query.order_by(MenuItem.name).all()
+        query = query.filter(PosMenuItem.is_active == True)
+    return query.order_by(PosMenuItem.name).all()
 
 
 def update_menu_item(
     db: Session, menu_id: int, data: MenuItemUpdate
-) -> Optional[MenuItem]:
+) -> Optional[PosMenuItem]:
     """메뉴 마스터 정보 수정 (원가, 카테고리 등)"""
-    item = db.query(MenuItem).filter(
-        MenuItem.id == menu_id,
-        MenuItem.is_deleted == 0,
+    item = db.query(PosMenuItem).filter(
+        PosMenuItem.id == menu_id,
+        PosMenuItem.is_deleted == 0,
     ).first()
     if not item:
         return None
@@ -1065,9 +1065,9 @@ def _upsert_menu_item(
     메뉴 마스터에 없는 메뉴를 자동으로 등록합니다.
     이미 있는 경우 건너뜁니다.
     """
-    existing = db.query(MenuItem).filter(MenuItem.name == name).first()
+    existing = db.query(PosMenuItem).filter(PosMenuItem.name == name).first()
     if not existing:
-        db.add(MenuItem(
+        db.add(PosMenuItem(
             name=name,
             category=category or "기타",
             price=price,

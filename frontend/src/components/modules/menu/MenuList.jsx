@@ -22,8 +22,11 @@ import {
 } from "../../../api/menuApi";
 import MenuItemModal from "./MenuItemModal";
 import IngredientsModal from "./IngredientsModal";
+import { useToast } from "../../../contexts/ToastContext";
+import ConfirmDialog from "../../common/ConfirmDialog";
 
 const MenuList = () => {
+  const toast = useToast();
   // 데이터 상태 관리
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -41,6 +44,8 @@ const MenuList = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [ingModalOpen, setIngModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  // 메뉴 삭제 확인 다이얼로그 상태
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, item: null });
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -106,14 +111,20 @@ const MenuList = () => {
     await loadItems();
   };
 
-  // 메뉴 삭제 핸들러
-  const handleDelete = async (item) => {
-    if (!window.confirm(`"${item.name}" 메뉴를 삭제하시겠습니까?`)) return;
+  // 메뉴 삭제 버튼 클릭 → 확인 다이얼로그 열기
+  const handleDeleteClick = (item) => {
+    setDeleteConfirm({ open: true, item });
+  };
+
+  // 메뉴 삭제 확인 → 실제 삭제 실행
+  const handleDeleteConfirm = async () => {
+    const item = deleteConfirm.item;
+    setDeleteConfirm({ open: false, item: null });
     try {
       await deleteMenuItem(item.id);
       await loadItems();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -123,7 +134,7 @@ const MenuList = () => {
       await toggleMenuActive(item.id);
       await loadItems();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -133,7 +144,7 @@ const MenuList = () => {
       await toggleMenuFeatured(item.id);
       await loadItems();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -345,7 +356,7 @@ const MenuList = () => {
                       </button>
                       {/* 삭제 */}
                       <button
-                        onClick={() => handleDelete(item)}
+                        onClick={() => handleDeleteClick(item)}
                         className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
                         title="삭제"
                       >
@@ -375,6 +386,17 @@ const MenuList = () => {
         onClose={() => setIngModalOpen(false)}
         menuItem={selectedItem}
         onCostUpdate={handleCostUpdate}
+      />
+
+      {/* 메뉴 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.open}
+        title="메뉴 삭제"
+        message={`"${deleteConfirm.item?.name}" 메뉴를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+        confirmText="삭제"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ open: false, item: null })}
       />
     </div>
   );

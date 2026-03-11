@@ -48,7 +48,10 @@
 ## 직원 관리 모듈 특이사항
 - 2026년 최저임금: 10,030원/시 (`MINIMUM_WAGE_PER_HOUR` 상수, 정부 고시 변경 시 services/employee_service.py 수동 업데이트 필요)
 - 4대보험 요율: 국민연금 4.5%, 건강보험 3.545%, 장기요양 12.95%(건강보험 기준), 고용보험 0.9%
-- 주휴수당: 주 15시간 이상 근무 시 발생, 공식: (주근무시간/40)×8×시급×4
+- 주휴수당: 주차별 개별 판단 (_calculate_monthly_weekly_holiday_pay), 월 평균 사용 금지
+  - 각 주의 해당 월 귀속 근무시간이 15시간 이상이면 발생, 공식: min((주근무시간/40)×8, 8)×시급
+- 최저임금 검증: 기본급만 비교 (base_pay / total_work_hours), 주휴·연장·야간수당 제외
+- 월급제: 통상시급(월급÷209h) 기준으로 연장·야간 가산분 0.5배 추가 계산 (근로기준법 제56조)
 - 파일 업로드: `backend/uploads/contracts/{employee_id}/` 에 저장 (PDF/JPG/PNG, 10MB 제한)
 - FormData 업로드 시 Content-Type 헤더 생략 필수 (브라우저 자동 처리)
 - 급여 정산: UNIQUE(employee_id, year, month) 제약으로 월 1회만 저장, upsert 방식 처리
@@ -68,6 +71,11 @@
 - 재무 개요: 세무/회계 모듈(sales_records, expense_records)과 corporate_expenses를 JOIN 없이 별도 집계
 - 법인 비용 분류: 세무사비/법인보험료/법인등기비/상표특허비/법인통신비/법인차량비/임원급여/기타
 - 동업자 지분율 합계 100% 초과 시 ValueError 발생 (create/update 모두 검증)
+- 법인세: 2026년 기준 2억 이하 9%, 초과분 19% (_calculate_corporate_tax), 손실 시 0원
+- 배당소득세 원천징수: 배당소득세 14% + 지방소득세 1.4% = 15.4% (소득세법 제129조)
+- DividendSimulationItem: dividend_amount(세전), withholding_tax, net_dividend(세후) 3가지 반환
+- DividendSimulationRequest: corporate_tax_mode("auto"/"manual"), corporate_tax_manual 필드 추가
+- DividendSimulationResponse: corporate_tax, after_tax_profit, total_withholding_tax, total_net_dividend 필드 추가
 
 ## 메뉴 관리 모듈 특이사항
 - 구성 재료 추가/수정/삭제 시 메뉴 원가 자동 재계산 (_recalculate_menu_cost)

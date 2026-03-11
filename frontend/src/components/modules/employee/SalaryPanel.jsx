@@ -13,6 +13,8 @@ import {
   saveSalary, updateSalaryRecord, fetchSalaryHistory,
   formatCurrency, formatHours, formatEmploymentType, formatSalaryType, formatDate
 } from "../../../api/employeeApi";
+import { useToast } from "../../../contexts/ToastContext";
+import ConfirmDialog from "../../common/ConfirmDialog";
 
 /**
  * 급여 정산 패널 컴포넌트
@@ -20,6 +22,7 @@ import {
  * @param {number} month - 정산 월
  */
 const SalaryPanel = ({ year, month }) => {
+  const toast = useToast();
   // 직원 목록
   const [employees, setEmployees] = useState([]);
   // 월별 급여 요약
@@ -40,6 +43,10 @@ const SalaryPanel = ({ year, month }) => {
   const [historyData, setHistoryData] = useState([]);
   // 이력 로딩
   const [historyLoading, setHistoryLoading] = useState(false);
+  // 급여 확정 저장 확인 다이얼로그 상태
+  const [saveConfirm, setSaveConfirm] = useState({ open: false, employeeId: null, employeeName: "" });
+  // 전체 급여 계산 확인 다이얼로그 상태
+  const [calcAllConfirm, setCalcAllConfirm] = useState(false);
 
   // 연도/월 변경 시 데이터 재로드
   useEffect(() => {
@@ -81,26 +88,32 @@ const SalaryPanel = ({ year, month }) => {
       // 계산 후 자동으로 상세 펼치기
       setExpandedEmployee(employeeId);
     } catch (err) {
-      alert(`급여 계산 오류: ${err.message}`);
+      toast.error(`급여 계산 오류: ${err.message}`);
     } finally {
       setLoadingMap((prev) => ({ ...prev, [employeeId]: false }));
     }
   };
 
   /**
-   * 특정 직원의 급여를 저장 (정산 확정)
+   * 급여 확정 저장 버튼 클릭 → 확인 다이얼로그 열기
    * @param {number} employeeId - 직원 ID
    * @param {string} employeeName - 직원 이름
    */
-  const handleSave = async (employeeId, employeeName) => {
-    if (!window.confirm(`"${employeeName}"의 ${year}년 ${month}월 급여를 확정 저장하시겠습니까?`)) return;
+  const handleSaveClick = (employeeId, employeeName) => {
+    setSaveConfirm({ open: true, employeeId, employeeName });
+  };
+
+  /** 급여 확정 저장 확인 → 실제 저장 실행 */
+  const handleSaveConfirm = async () => {
+    const { employeeId, employeeName } = saveConfirm;
+    setSaveConfirm({ open: false, employeeId: null, employeeName: "" });
     try {
       setLoadingMap((prev) => ({ ...prev, [employeeId]: true }));
       await saveSalary(employeeId, year, month);
       await loadData();
-      alert(`${employeeName}의 ${month}월 급여가 저장되었습니다.`);
+      toast.success(`${employeeName}의 ${month}월 급여가 저장되었습니다.`);
     } catch (err) {
-      alert(`저장 오류: ${err.message}`);
+      toast.error(`저장 오류: ${err.message}`);
     } finally {
       setLoadingMap((prev) => ({ ...prev, [employeeId]: false }));
     }
@@ -120,15 +133,20 @@ const SalaryPanel = ({ year, month }) => {
       });
       await loadData();
     } catch (err) {
-      alert(`처리 중 오류가 발생했습니다: ${err.message}`);
+      toast.error(`처리 중 오류가 발생했습니다: ${err.message}`);
     }
   };
 
   /**
-   * 전체 직원 일괄 급여 계산
+   * 전체 직원 일괄 급여 계산 버튼 클릭 → 확인 다이얼로그 열기
    */
-  const handleCalculateAll = async () => {
-    if (!window.confirm(`${year}년 ${month}월 전체 직원(${employees.length}명) 급여를 계산하시겠습니까?`)) return;
+  const handleCalculateAllClick = () => {
+    setCalcAllConfirm(true);
+  };
+
+  /** 전체 급여 계산 확인 → 실제 일괄 계산 실행 */
+  const handleCalculateAllConfirm = async () => {
+    setCalcAllConfirm(false);
     for (const emp of employees) {
       await handleCalculate(emp.id);
     }
@@ -146,7 +164,7 @@ const SalaryPanel = ({ year, month }) => {
       const data = await fetchSalaryHistory(emp.id);
       setHistoryData(data);
     } catch (err) {
-      alert(`이력 조회 오류: ${err.message}`);
+      toast.error(`이력 조회 오류: ${err.message}`);
     } finally {
       setHistoryLoading(false);
     }
@@ -168,8 +186,9 @@ const SalaryPanel = ({ year, month }) => {
   return (
     <div>
       {/* 월별 급여 요약 KPI 카드 */}
+      {/* KPI 카드 — 반응형: 1열→2열→4열 */}
       {overview && overview.total_employees > 0 && (
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-lg shadow-sm p-5">
             <div className="text-xs text-slate-500 mb-1">정산 인원</div>
             <div className="text-2xl font-bold text-slate-900">{overview.total_employees}명</div>
@@ -202,7 +221,7 @@ const SalaryPanel = ({ year, month }) => {
         </p>
         {employees.length > 0 && (
           <button
-            onClick={handleCalculateAll}
+            onClick={handleCalculateAllClick}
             className="flex items-center gap-2 h-9 px-4 border border-blue-200 text-blue-600 text-sm font-semibold rounded-md hover:bg-blue-50 transition-colors"
           >
             <Calculator size={16} />
@@ -436,7 +455,7 @@ const SalaryPanel = ({ year, month }) => {
                         )}
                       </div>
                       <button
-                        onClick={() => handleSave(emp.id, emp.name)}
+                        onClick={() => handleSaveClick(emp.id, emp.name)}
                         disabled={isLoading}
                         className="flex items-center gap-2 h-10 px-5 bg-green-500 text-white text-sm font-semibold rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors"
                       >
@@ -451,6 +470,28 @@ const SalaryPanel = ({ year, month }) => {
           })}
         </div>
       )}
+
+      {/* 급여 확정 저장 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={saveConfirm.open}
+        title="급여 확정 저장"
+        message={`"${saveConfirm.employeeName}"의 ${year}년 ${month}월 급여를 확정 저장하시겠습니까?`}
+        confirmText="저장"
+        variant="primary"
+        onConfirm={handleSaveConfirm}
+        onCancel={() => setSaveConfirm({ open: false, employeeId: null, employeeName: "" })}
+      />
+
+      {/* 전체 급여 계산 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={calcAllConfirm}
+        title="전체 급여 계산"
+        message={`${year}년 ${month}월 전체 직원(${employees.length}명) 급여를 계산하시겠습니까?`}
+        confirmText="계산 시작"
+        variant="primary"
+        onConfirm={handleCalculateAllConfirm}
+        onCancel={() => setCalcAllConfirm(false)}
+      />
 
       {/* 급여 지급 이력 모달 */}
       {historyEmployee && (
