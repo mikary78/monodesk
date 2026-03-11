@@ -292,7 +292,12 @@ def create_dividend_records(
     records = []
 
     for partner in partners:
+        # 세전 배당금 계산 (지분율 × 배당 대상 금액)
         dividend_amount = round(distributable_amount * (partner.equity_ratio / 100.0))
+
+        # 배당소득세 원천징수 계산 (소득세법 제129조: 14% + 지방소득세 1.4% = 15.4%)
+        withholding_tax = round(dividend_amount * DIVIDEND_WITHHOLDING_RATE)
+        net_dividend = dividend_amount - withholding_tax
 
         # 기존 기록 확인 (upsert 처리)
         existing = (
@@ -306,15 +311,17 @@ def create_dividend_records(
         )
 
         if existing:
-            # 기존 기록 업데이트
+            # 기존 기록 업데이트 (원천징수 및 실수령액 포함)
             existing.annual_net_profit = request.annual_net_profit
             existing.distributable_amount = round(distributable_amount)
             existing.dividend_amount = dividend_amount
+            existing.withholding_tax = withholding_tax
+            existing.net_dividend = net_dividend
             existing.equity_ratio_snapshot = partner.equity_ratio
             existing.partner_name = partner.name
             records.append(existing)
         else:
-            # 신규 기록 생성
+            # 신규 기록 생성 (원천징수 및 실수령액 포함)
             record = DividendRecord(
                 year=request.year,
                 partner_id=partner.id,
@@ -323,6 +330,8 @@ def create_dividend_records(
                 annual_net_profit=request.annual_net_profit,
                 distributable_amount=round(distributable_amount),
                 dividend_amount=dividend_amount,
+                withholding_tax=withholding_tax,
+                net_dividend=net_dividend,
                 memo=request.memo if hasattr(request, "memo") else None,
             )
             db.add(record)

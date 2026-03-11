@@ -76,6 +76,9 @@
 - DividendSimulationItem: dividend_amount(세전), withholding_tax, net_dividend(세후) 3가지 반환
 - DividendSimulationRequest: corporate_tax_mode("auto"/"manual"), corporate_tax_manual 필드 추가
 - DividendSimulationResponse: corporate_tax, after_tax_profit, total_withholding_tax, total_net_dividend 필드 추가
+- DividendRecord 모델: withholding_tax, net_dividend 컬럼 추가됨 (nullable=True, 기존 데이터 하위 호환)
+  - create_dividend_records 서비스에서 원천징수·실수령액을 DB에 영속화
+  - DividendRecordResponse 스키마에도 두 필드 추가 (Optional[float] = None)
 
 ## 메뉴 관리 모듈 특이사항
 - 구성 재료 추가/수정/삭제 시 메뉴 원가 자동 재계산 (_recalculate_menu_cost)
