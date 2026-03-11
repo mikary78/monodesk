@@ -95,7 +95,14 @@ class DividendRecordResponse(BaseModel):
     equity_ratio_snapshot: float
     annual_net_profit: float
     distributable_amount: float
+    # 세전 배당금 (지분율 × 배당 대상 금액)
     dividend_amount: float
+    # 원천징수세액 (소득세법 제129조: 배당소득세 14% + 지방소득세 1.4% = 15.4%)
+    # nullable: 기존 데이터 하위 호환 유지
+    withholding_tax: Optional[float] = None
+    # 세후 실수령액 (세전 배당금 - 원천징수세액)
+    # nullable: 기존 데이터 하위 호환 유지
+    net_dividend: Optional[float] = None
     is_paid: int
     paid_date: Optional[str] = None
     memo: Optional[str] = None

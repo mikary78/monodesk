@@ -83,8 +83,16 @@ class DividendRecord(Base):
     # 배당 대상 금액 (순이익 중 배당 비율 적용 후)
     distributable_amount = Column(Float, default=0, comment="배당 대상 금액 (원)")
 
-    # 배당금 (배당 대상 금액 × 지분율)
-    dividend_amount = Column(Float, default=0, comment="배당금 (원)")
+    # 배당금 (배당 대상 금액 × 지분율) — 세전 배당금
+    dividend_amount = Column(Float, default=0, comment="배당금 세전 (원)")
+
+    # 원천징수세액 (소득세법 제129조: 배당소득세 14% + 지방소득세 1.4% = 15.4%)
+    # nullable=True — 기존 데이터와 하위 호환 유지
+    withholding_tax = Column(Float, nullable=True, default=None, comment="원천징수세액 (원, 배당소득세14% + 지방1.4%)")
+
+    # 세후 실수령액 (세전 배당금 - 원천징수세액)
+    # nullable=True — 기존 데이터와 하위 호환 유지
+    net_dividend = Column(Float, nullable=True, default=None, comment="세후 실수령액 (원)")
 
     # 지급 완료 여부
     is_paid = Column(Integer, default=0, comment="지급 완료 여부 (0: 미지급, 1: 지급 완료)")
