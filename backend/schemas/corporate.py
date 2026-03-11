@@ -112,10 +112,21 @@ class DividendRecordResponse(BaseModel):
 class DividendSimulationRequest(BaseModel):
     """배당 시뮬레이션 요청 스키마"""
     year: int = Field(..., ge=2020, le=2099, description="정산 연도")
-    annual_net_profit: float = Field(..., description="연간 순이익 (원)")
+    annual_net_profit: float = Field(..., description="연간 순이익 (원, 법인세 차감 전)")
     distribution_ratio: float = Field(
         100.0, ge=0, le=100,
-        description="순이익 중 배당으로 분배할 비율 (%)"
+        description="세후 순이익 중 배당으로 분배할 비율 (%)"
+    )
+    # 법인세 입력 방식 선택
+    # - auto: 과세표준에 따라 자동 계산 (법인세법 기준)
+    # - manual: 사용자가 직접 입력 (세무사 확정액 사용 시)
+    corporate_tax_mode: str = Field(
+        "auto",
+        description="법인세 계산 방식: 'auto'(자동) 또는 'manual'(직접 입력)"
+    )
+    corporate_tax_manual: Optional[float] = Field(
+        None, ge=0,
+        description="법인세 직접 입력 금액 (corporate_tax_mode='manual'일 때 사용)"
     )
 
 
@@ -124,17 +135,31 @@ class DividendSimulationItem(BaseModel):
     partner_id: int
     partner_name: str
     equity_ratio: float
+    # 세전 배당금 (지분율 × 배당 대상 금액)
     dividend_amount: float
+    # 배당소득세 원천징수액 (14%) + 지방소득세 (1.4%) = 15.4%
+    withholding_tax: float = 0.0
+    # 세후 실수령액
+    net_dividend: float = 0.0
 
 
 class DividendSimulationResponse(BaseModel):
     """배당 시뮬레이션 전체 응답"""
     year: int
     annual_net_profit: float
+    # 법인세 (자동 계산 또는 수동 입력)
+    corporate_tax: float
+    # 세후 순이익 (annual_net_profit - corporate_tax)
+    after_tax_profit: float
     distribution_ratio: float
+    # 배당 대상 금액 (세후 순이익 × 배당 비율)
     distributable_amount: float
     items: List[DividendSimulationItem]
     total_dividend: float
+    # 전체 원천징수 합계
+    total_withholding_tax: float = 0.0
+    # 전체 세후 실수령액 합계
+    total_net_dividend: float = 0.0
 
 
 # ─────────────────────────────────────────

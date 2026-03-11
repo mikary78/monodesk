@@ -13,6 +13,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional, Dict, Any
+from datetime import date, timedelta
 from models.employee import Employee, AttendanceRecord, SalaryRecord
 from schemas.employee import (
     EmployeeCreate, EmployeeUpdate,
@@ -306,6 +307,72 @@ def _calculate_weekly_holiday_pay(weekly_work_hours: float, hourly_wage: float) 
     return round(weekly_holiday_hours * hourly_wage, 0)
 
 
+def _calculate_monthly_weekly_holiday_pay(
+    attendance_list: list,
+    hourly_wage: float,
+    year: int,
+    month: int
+) -> float:
+    """
+    월 전체 주휴수당 계산 (근로기준법 제55조).
+    월 평균이 아닌 각 주차별로 실제 근무시간을 집계하여 개별 판단합니다.
+
+    주차 구분 기준:
+    - 해당 월의 월요일을 기준으로 주차를 나눕니다.
+    - 단, 해당 달에 속한 날짜만 계산에 포함합니다.
+
+    조건:
+    - 해당 주 실제 근무시간 합계가 15시간 이상인 경우에만 주휴수당 발생
+
+    계산식:
+    - 주휴시간 = min((주 근무시간 / 40) × 8, 8) 시간
+    - 주휴수당 = 주휴시간 × 시급
+    """
+    # 출퇴근 기록을 날짜별 딕셔너리로 변환 (work_date → work_hours)
+    work_hours_by_date: Dict[str, float] = {}
+    for record in attendance_list:
+        if record.work_date and record.work_hours:
+            work_hours_by_date[record.work_date] = (
+                work_hours_by_date.get(record.work_date, 0.0) + record.work_hours
+            )
+
+    # 해당 월의 첫날과 마지막날 계산
+    import calendar
+    first_day = date(year, month, 1)
+    last_day_num = calendar.monthrange(year, month)[1]
+    last_day = date(year, month, last_day_num)
+
+    # 월요일 기준으로 주차를 순회
+    # 첫 번째 월요일 찾기 (first_day가 월요일이 아니면, 이전 주의 월요일부터 시작)
+    # 주 단위로 순회하되 해당 월에 속한 날짜만 집계
+    week_start = first_day - timedelta(days=first_day.weekday())  # 해당 월 첫날이 속한 주의 월요일
+
+    total_weekly_holiday_pay = 0.0
+
+    while week_start <= last_day:
+        week_end = week_start + timedelta(days=6)  # 일요일
+
+        # 이 주에서 해당 월에 속하는 날짜만 합산
+        weekly_hours = 0.0
+        current_day = week_start
+        while current_day <= week_end:
+            if first_day <= current_day <= last_day:
+                date_str = current_day.strftime("%Y-%m-%d")
+                weekly_hours += work_hours_by_date.get(date_str, 0.0)
+            current_day += timedelta(days=1)
+
+        # 해당 주에 실제 근무한 시간이 있는 경우에만 주휴수당 판단
+        # (해당 월에 걸친 날짜가 전혀 없으면 건너뜀)
+        if weekly_hours >= WEEKLY_HOLIDAY_THRESHOLD:
+            # 주휴시간 = (주 근무시간 / 40) × 8, 최대 8시간
+            holiday_hours = min(8.0, (weekly_hours / 40.0) * 8.0)
+            total_weekly_holiday_pay += round(holiday_hours * hourly_wage, 0)
+
+        week_start += timedelta(weeks=1)
+
+    return total_weekly_holiday_pay
+
+
 def _calculate_insurance_deductions(gross_pay: float) -> Dict[str, float]:
     """
     4대보험 근로자 공제액 계산 (2026년 요율).
@@ -379,31 +446,43 @@ def calculate_salary(
         # 야간근로수당: 야간 시간 × 시급 × 0.5 (가산분)
         night_pay = round(total_night_hours * hourly_wage * 0.5, 0)
 
-        # 주휴수당: 주차별 계산 후 합산
-        # 월 전체 근무시간을 4.33주로 나누어 주당 근무시간 추정
-        avg_weekly_hours = total_work_hours / 4.33 if total_work_hours > 0 else 0
-        weekly_holiday_pay = _calculate_weekly_holiday_pay(avg_weekly_hours, hourly_wage)
-        # 월 4주분으로 확장 (정확한 주차별 계산을 위해 4주 기준)
-        weekly_holiday_pay = round(weekly_holiday_pay * 4, 0)
+        # 주휴수당: 근로기준법 제55조 — 주차별 실제 근무시간으로 개별 판단
+        # 월 전체를 평균내지 않고, 각 주에 15시간 이상 근무한 경우에만 발생
+        weekly_holiday_pay = _calculate_monthly_weekly_holiday_pay(
+            attendance_list, hourly_wage, year, month
+        )
 
         gross_pay = base_pay + overtime_pay + night_pay + weekly_holiday_pay
 
-        # 최저임금 충족 여부 확인
-        # 주휴수당 포함 시급 환산: gross_pay / (total_work_hours + 주휴시간)
-        effective_hourly = (gross_pay / total_work_hours) if total_work_hours > 0 else hourly_wage
+        # 최저임금 충족 여부 확인 (최저임금법 제6조)
+        # 비교 기준: 기본급만 / 실제 근무시간 (주휴·연장·야간수당은 제외)
+        # 기본급 = 정규 근무시간 × 시급 (연장·야간 가산분 제외)
+        effective_hourly = (base_pay / total_work_hours) if total_work_hours > 0 else hourly_wage
         minimum_wage_ok = effective_hourly >= MINIMUM_WAGE_PER_HOUR
 
     else:
-        # 월급제 계산
-        base_pay = employee.monthly_salary or 0
-        overtime_pay = 0.0
-        night_pay = 0.0
-        weekly_holiday_pay = 0.0
-        gross_pay = base_pay
+        # 월급제 계산 (근로기준법 제56조)
+        # 월급에는 기본 근로시간(주 40시간 × 4.345주 ≈ 209시간)이 포함되어 있음
+        base_pay = float(employee.monthly_salary or 0)
 
-        # 최저임금 확인: 월급 ÷ 209시간(월 기준근로시간) >= 최저시급
+        # 통상시급 = 월급 ÷ 209시간 (주 40시간 기준 월 환산 시간)
         monthly_standard_hours = 209.0
-        effective_hourly = gross_pay / monthly_standard_hours if gross_pay > 0 else 0
+        hourly_wage_monthly = base_pay / monthly_standard_hours if base_pay > 0 else 0.0
+
+        # 연장근로수당: 월급에 기본 1배가 포함되어 있으므로 가산분 0.5배만 추가
+        # (총 연장 시간은 출퇴근 기록에서 집계)
+        overtime_pay = round(total_overtime_hours * hourly_wage_monthly * 0.5, 0)
+
+        # 야간근로수당: 22:00~06:00 구간 가산분 0.5배
+        night_pay = round(total_night_hours * hourly_wage_monthly * 0.5, 0)
+
+        # 월급제는 소정근로 이행 시 주휴 포함, 별도 주휴수당 없음
+        weekly_holiday_pay = 0.0
+
+        gross_pay = base_pay + overtime_pay + night_pay
+
+        # 최저임금 확인: 월급 ÷ 209시간 >= 최저시급 (기본급 기준)
+        effective_hourly = hourly_wage_monthly
         minimum_wage_ok = effective_hourly >= MINIMUM_WAGE_PER_HOUR
 
     # 4대보험 공제 (적용 대상만)

@@ -5,7 +5,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -24,8 +24,8 @@ class InventoryCategory(Base):
     color = Column(String(7), default="#64748B", comment="UI 표시 색상 (HEX)")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 재고 품목과의 관계
     items = relationship("InventoryItem", back_populates="category")
@@ -62,8 +62,8 @@ class InventoryItem(Base):
     memo = Column(Text, nullable=True, comment="메모")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 분류와의 관계
     category = relationship("InventoryCategory", back_populates="items")
@@ -119,8 +119,8 @@ class InventoryAdjustment(Base):
     memo = Column(Text, nullable=True, comment="메모")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 품목과의 관계
     item = relationship("InventoryItem", back_populates="adjustments")
@@ -157,8 +157,8 @@ class PurchaseOrder(Base):
     memo = Column(Text, nullable=True, comment="메모")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 발주 품목과의 관계
     order_items = relationship("PurchaseOrderItem", back_populates="order", cascade="all, delete-orphan")
@@ -189,8 +189,8 @@ class PurchaseOrderItem(Base):
     received_quantity = Column(Float, default=0, comment="실제 입고 수량")
     # 메모
     memo = Column(Text, nullable=True, comment="메모")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 발주서와의 관계
     order = relationship("PurchaseOrder", back_populates="order_items")

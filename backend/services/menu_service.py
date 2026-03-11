@@ -307,10 +307,12 @@ def get_menu_stats(db: Session) -> MenuStatsResponse:
     inactive_items = total_items - active_items
     featured_items = sum(1 for item in all_items if item.is_featured == 1)
 
-    # 전체 평균 원가율 계산
-    if total_items > 0:
+    # 전체 평균 원가율 계산 (원가 등록된 메뉴만 포함, 원가=0 제외)
+    # 원가 미등록 메뉴를 포함하면 평균이 왜곡되므로 제외
+    costed_items = [item for item in all_items if item.cost > 0]
+    if costed_items:
         avg_cost_ratio = round(
-            sum(item.cost_ratio for item in all_items) / total_items, 1
+            sum(item.cost_ratio for item in costed_items) / len(costed_items), 1
         )
     else:
         avg_cost_ratio = 0.0
@@ -378,11 +380,17 @@ def get_cost_analysis(db: Session) -> MenuCostAnalysisResponse:
             high_cost_items=[],
             avg_cost_ratio=0.0,
             weighted_avg_cost_ratio=0.0,
+            cost_unregistered_count=0,
         )
 
-    # 원가율 구간별 분포
+    # 원가 등록 여부로 메뉴 분리
+    # 원가=0인 메뉴는 분석 통계에서 제외하고 미등록 카운트로 별도 집계
+    registered_items = [item for item in items if item.cost > 0]
+    cost_unregistered_count = len(items) - len(registered_items)
+
+    # 원가율 구간별 분포 (원가 등록 메뉴만 대상)
     dist = {"0-30%": 0, "30-50%": 0, "50-70%": 0, "70%+": 0}
-    for item in items:
+    for item in registered_items:
         cr = item.cost_ratio
         if cr <= 30:
             dist["0-30%"] += 1
@@ -397,18 +405,25 @@ def get_cost_analysis(db: Session) -> MenuCostAnalysisResponse:
         {"range": k, "count": v} for k, v in dist.items()
     ]
 
-    # 평균 원가율 계산
-    avg_cost_ratio = round(sum(item.cost_ratio for item in items) / len(items), 1)
+    # 단순 평균 원가율 계산 (원가 등록 메뉴만 포함)
+    if registered_items:
+        avg_cost_ratio = round(
+            sum(item.cost_ratio for item in registered_items) / len(registered_items), 1
+        )
+    else:
+        avg_cost_ratio = 0.0
 
-    # 가중 평균 원가율 계산 (판매가 기준 가중치)
-    total_price = sum(item.price for item in items)
+    # 근사 가중 평균 원가율 계산 (판매가 기준 가중치)
+    # 주의: 판매 수량 데이터 미연동 상태에서의 근사값입니다.
+    #       실제 판매 수량 연동 시에는 수량 기반 가중평균으로 교체 필요.
+    total_price = sum(item.price for item in registered_items)
     if total_price > 0:
-        weighted_avg = sum(item.cost_ratio * item.price for item in items) / total_price
+        weighted_avg = sum(item.cost_ratio * item.price for item in registered_items) / total_price
         weighted_avg_cost_ratio = round(weighted_avg, 1)
     else:
         weighted_avg_cost_ratio = 0.0
 
-    # 메뉴별 통계 목록 구성
+    # 메뉴별 통계 목록 구성 (원가 등록 메뉴만 포함)
     item_list = [
         {
             "id": item.id,
@@ -420,7 +435,7 @@ def get_cost_analysis(db: Session) -> MenuCostAnalysisResponse:
             "margin": item.margin,
             "margin_ratio": item.margin_ratio,
         }
-        for item in items
+        for item in registered_items
     ]
 
     # 고마진 메뉴 (원가율 낮은 순 상위 10개)
@@ -435,6 +450,7 @@ def get_cost_analysis(db: Session) -> MenuCostAnalysisResponse:
         high_cost_items=high_cost_items,
         avg_cost_ratio=avg_cost_ratio,
         weighted_avg_cost_ratio=weighted_avg_cost_ratio,
+        cost_unregistered_count=cost_unregistered_count,
     )
 
 

@@ -15,11 +15,14 @@ import {
   formatEmploymentType, formatSalaryType, formatCurrency, formatDate
 } from "../../../api/employeeApi";
 import EmployeeFormModal from "./EmployeeFormModal";
+import { useToast } from "../../../contexts/ToastContext";
+import ConfirmDialog from "../../common/ConfirmDialog";
 
 /**
  * 직원 목록 컴포넌트
  */
 const EmployeeList = () => {
+  const toast = useToast();
   // 직원 목록 상태
   const [employees, setEmployees] = useState([]);
   // 로딩 상태
@@ -40,6 +43,10 @@ const EmployeeList = () => {
   const fileInputRef = useRef(null);
   // 현재 계약서 업로드 대상 직원 ID
   const [contractTargetId, setContractTargetId] = useState(null);
+  // 직원 삭제 확인 다이얼로그 상태
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, employee: null });
+  // 계약서 삭제 확인 다이얼로그 상태
+  const [contractDeleteConfirm, setContractDeleteConfirm] = useState({ open: false, employee: null });
 
   // 마운트 / 퇴사자 포함 변경 시 직원 목록 불러오기
   useEffect(() => {
@@ -63,16 +70,22 @@ const EmployeeList = () => {
   };
 
   /**
-   * 직원 삭제 처리
+   * 직원 삭제 버튼 클릭 → 확인 다이얼로그 열기
    * @param {object} employee - 삭제할 직원 객체
    */
-  const handleDelete = async (employee) => {
-    if (!window.confirm(`"${employee.name}" 직원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  const handleDeleteClick = (employee) => {
+    setDeleteConfirm({ open: true, employee });
+  };
+
+  /** 직원 삭제 확인 → 실제 삭제 실행 */
+  const handleDeleteConfirm = async () => {
+    const employee = deleteConfirm.employee;
+    setDeleteConfirm({ open: false, employee: null });
     try {
       await deleteEmployee(employee.id);
       await loadEmployees();
     } catch (err) {
-      alert(`삭제 중 오류가 발생했습니다: ${err.message}`);
+      toast.error(`삭제 중 오류가 발생했습니다: ${err.message}`);
     }
   };
 
@@ -95,7 +108,7 @@ const EmployeeList = () => {
 
     // 파일 크기 10MB 제한
     if (file.size > 10 * 1024 * 1024) {
-      alert("파일 크기는 10MB 이하만 업로드 가능합니다.");
+      toast.error("파일 크기는 10MB 이하만 업로드 가능합니다.");
       e.target.value = "";
       return;
     }
@@ -104,9 +117,9 @@ const EmployeeList = () => {
       setUploadingMap((prev) => ({ ...prev, [contractTargetId]: true }));
       await uploadContract(contractTargetId, file);
       await loadEmployees();
-      alert("근로계약서가 업로드되었습니다.");
+      toast.success("근로계약서가 업로드되었습니다.");
     } catch (err) {
-      alert(`업로드 오류: ${err.message}`);
+      toast.error(`업로드 오류: ${err.message}`);
     } finally {
       setUploadingMap((prev) => ({ ...prev, [contractTargetId]: false }));
       setContractTargetId(null);
@@ -115,16 +128,22 @@ const EmployeeList = () => {
   };
 
   /**
-   * 근로계약서 파일 삭제
+   * 근로계약서 삭제 버튼 클릭 → 확인 다이얼로그 열기
    * @param {object} employee - 직원 객체
    */
-  const handleContractDelete = async (employee) => {
-    if (!window.confirm(`"${employee.name}"의 근로계약서를 삭제하시겠습니까?`)) return;
+  const handleContractDeleteClick = (employee) => {
+    setContractDeleteConfirm({ open: true, employee });
+  };
+
+  /** 근로계약서 삭제 확인 → 실제 삭제 실행 */
+  const handleContractDeleteConfirm = async () => {
+    const employee = contractDeleteConfirm.employee;
+    setContractDeleteConfirm({ open: false, employee: null });
     try {
       await deleteContract(employee.id);
       await loadEmployees();
     } catch (err) {
-      alert(`삭제 오류: ${err.message}`);
+      toast.error(`삭제 오류: ${err.message}`);
     }
   };
 
@@ -329,7 +348,7 @@ const EmployeeList = () => {
                         </button>
                         {/* 계약서 삭제 버튼 */}
                         <button
-                          onClick={() => handleContractDelete(emp)}
+                          onClick={() => handleContractDeleteClick(emp)}
                           className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-red-50 transition-colors"
                           title="계약서 삭제"
                         >
@@ -366,7 +385,7 @@ const EmployeeList = () => {
                       <Edit size={14} className="text-slate-500" />
                     </button>
                     <button
-                      onClick={() => handleDelete(emp)}
+                      onClick={() => handleDeleteClick(emp)}
                       className="h-8 w-8 flex items-center justify-center border border-red-200 rounded hover:bg-red-50 transition-colors"
                       title="직원 삭제"
                     >
@@ -388,6 +407,28 @@ const EmployeeList = () => {
           onSaved={() => { setShowModal(false); loadEmployees(); }}
         />
       )}
+
+      {/* 직원 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.open}
+        title="직원 삭제"
+        message={`"${deleteConfirm.employee?.name}" 직원을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+        confirmText="삭제"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ open: false, employee: null })}
+      />
+
+      {/* 근로계약서 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={contractDeleteConfirm.open}
+        title="근로계약서 삭제"
+        message={`"${contractDeleteConfirm.employee?.name}"의 근로계약서를 삭제하시겠습니까?`}
+        confirmText="삭제"
+        variant="danger"
+        onConfirm={handleContractDeleteConfirm}
+        onCancel={() => setContractDeleteConfirm({ open: false, employee: null })}
+      />
     </div>
   );
 };

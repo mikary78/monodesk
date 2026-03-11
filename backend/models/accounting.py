@@ -5,7 +5,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -21,8 +21,8 @@ class ExpenseCategory(Base):
     description = Column(String(200), nullable=True, comment="분류 설명")
     color = Column(String(7), default="#64748B", comment="UI 표시 색상 (HEX)")
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 지출 기록과의 관계
     expense_records = relationship("ExpenseRecord", back_populates="category")
@@ -61,8 +61,8 @@ class ExpenseRecord(Base):
     tax_invoice = Column(Boolean, default=False, comment="세금계산서 수취 여부")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 지출 분류와의 관계
     category = relationship("ExpenseCategory", back_populates="expense_records")
@@ -98,8 +98,8 @@ class SalesRecord(Base):
     is_pos_synced = Column(Integer, default=0, comment="POS 연동 여부 (0: 수동, 1: 자동)")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     @property
     def total_sales(self) -> float:

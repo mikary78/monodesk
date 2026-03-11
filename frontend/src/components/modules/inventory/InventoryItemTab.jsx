@@ -14,12 +14,21 @@ import {
   adjustInventoryQuantity, seedInventoryCategories,
   formatCurrency, formatQuantity, getStockStatusClass
 } from "../../../api/inventoryApi";
+import { useToast } from "../../../contexts/ToastContext";
+import ConfirmDialog from "../../common/ConfirmDialog";
 
 // ─────────────────────────────────────────
 // 재고 품목 등록/수정 모달 컴포넌트
 // ─────────────────────────────────────────
 
 const ItemFormModal = ({ item, categories, onSave, onClose }) => {
+  // Escape 키로 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   // 폼 상태 초기화
   const [form, setForm] = useState({
     name: item?.name || "",
@@ -63,14 +72,28 @@ const ItemFormModal = ({ item, categories, onSave, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-lg p-6 shadow-xl">
+    // 오버레이 클릭 시 닫기
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="item-form-modal-title"
+        className="bg-white rounded-xl w-full max-w-lg p-6 shadow-xl"
+      >
         {/* 모달 헤더 */}
         <div className="flex justify-between items-center mb-5">
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 id="item-form-modal-title" className="text-lg font-semibold text-slate-900">
             {item ? "재고 품목 수정" : "재고 품목 등록"}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold">
+          <button
+            onClick={onClose}
+            aria-label="닫기"
+            className="text-slate-400 hover:text-slate-600 text-xl font-bold"
+          >
             &times;
           </button>
         </div>
@@ -237,6 +260,13 @@ const ItemFormModal = ({ item, categories, onSave, onClose }) => {
 // ─────────────────────────────────────────
 
 const AdjustmentModal = ({ item, onSave, onClose }) => {
+  // Escape 키로 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const today = new Date().toISOString().split("T")[0];
   const [form, setForm] = useState({
     adjustment_type: "입고",
@@ -283,11 +313,25 @@ const AdjustmentModal = ({ item, onSave, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+    // 오버레이 클릭 시 닫기
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="presentation"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adjustment-modal-title"
+        className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl"
+      >
         <div className="flex justify-between items-center mb-5">
-          <h2 className="text-lg font-semibold text-slate-900">수량 조정</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl font-bold">
+          <h2 id="adjustment-modal-title" className="text-lg font-semibold text-slate-900">수량 조정</h2>
+          <button
+            onClick={onClose}
+            aria-label="닫기"
+            className="text-slate-400 hover:text-slate-600 text-xl font-bold"
+          >
             &times;
           </button>
         </div>
@@ -415,6 +459,7 @@ const AdjustmentModal = ({ item, onSave, onClose }) => {
 // ─────────────────────────────────────────
 
 const InventoryItemTab = ({ onRefreshSummary }) => {
+  const toast = useToast();
   // 상태 관리
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -431,14 +476,8 @@ const InventoryItemTab = ({ onRefreshSummary }) => {
   const [editItem, setEditItem] = useState(null);
   const [adjustItem, setAdjustItem] = useState(null);
 
-  // 토스트 메시지 상태
-  const [toast, setToast] = useState(null);
-
-  // 토스트 메시지 표시
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  // 삭제 확인 다이얼로그 상태
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, item: null });
 
   // 데이터 로드
   const loadData = async () => {
@@ -476,10 +515,10 @@ const InventoryItemTab = ({ onRefreshSummary }) => {
   const handleSaveItem = async (formData) => {
     if (editItem) {
       await updateInventoryItem(editItem.id, formData);
-      showToast("재고 품목이 수정되었습니다.");
+      toast.success("재고 품목이 수정되었습니다.");
     } else {
       await createInventoryItem(formData);
-      showToast("재고 품목이 등록되었습니다.");
+      toast.success("재고 품목이 등록되었습니다.");
     }
     setShowItemModal(false);
     setEditItem(null);
@@ -487,23 +526,29 @@ const InventoryItemTab = ({ onRefreshSummary }) => {
     onRefreshSummary?.();
   };
 
-  // 품목 삭제
-  const handleDeleteItem = async (item) => {
-    if (!confirm(`"${item.name}"을(를) 삭제하시겠습니까?`)) return;
+  // 삭제 버튼 클릭 → 확인 다이얼로그 열기
+  const handleDeleteClick = (item) => {
+    setDeleteConfirm({ open: true, item });
+  };
+
+  // 삭제 확인 → 실제 삭제 실행
+  const handleDeleteConfirm = async () => {
+    const item = deleteConfirm.item;
+    setDeleteConfirm({ open: false, item: null });
     try {
       await deleteInventoryItem(item.id);
-      showToast("재고 품목이 삭제되었습니다.");
+      toast.success("재고 품목이 삭제되었습니다.");
       loadData();
       onRefreshSummary?.();
     } catch (err) {
-      showToast(err.message, "error");
+      toast.error(err.message);
     }
   };
 
   // 수량 조정 처리
   const handleAdjust = async (adjustData) => {
     await adjustInventoryQuantity(adjustData);
-    showToast("재고 수량이 조정되었습니다.");
+    toast.success("재고 수량이 조정되었습니다.");
     setAdjustItem(null);
     loadData();
     onRefreshSummary?.();
@@ -513,25 +558,25 @@ const InventoryItemTab = ({ onRefreshSummary }) => {
   const handleSeedCategories = async () => {
     try {
       await seedInventoryCategories();
-      showToast("기본 재고 분류가 생성되었습니다.");
+      toast.success("기본 재고 분류가 생성되었습니다.");
       loadData();
     } catch (err) {
-      showToast(err.message, "error");
+      toast.error(err.message);
     }
   };
 
   return (
     <div>
-      {/* 토스트 알림 */}
-      {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-lg shadow-lg text-sm font-medium text-white
-          border-l-4 ${toast.type === "error"
-            ? "bg-red-600 border-red-800"
-            : "bg-green-600 border-green-800"
-          }`}>
-          {toast.message}
-        </div>
-      )}
+      {/* 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.open}
+        title="재고 품목 삭제"
+        message={`"${deleteConfirm.item?.name}"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+        confirmText="삭제"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ open: false, item: null })}
+      />
 
       {/* 필터 바 */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -686,7 +731,7 @@ const InventoryItemTab = ({ onRefreshSummary }) => {
                       </button>
                       {/* 삭제 버튼 */}
                       <button
-                        onClick={() => handleDeleteItem(item)}
+                        onClick={() => handleDeleteClick(item)}
                         title="삭제"
                         className="p-1.5 text-red-400 hover:bg-red-50 rounded"
                       >

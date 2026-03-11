@@ -7,6 +7,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Pencil, Trash2, Plus, Search } from "lucide-react";
 import { fetchExpenses, deleteExpense, fetchCategories, formatCurrency } from "../../../api/accountingApi";
 import ExpenseForm from "./ExpenseForm";
+import { useToast } from "../../../contexts/ToastContext";
+import ConfirmDialog from "../../common/ConfirmDialog";
 
 /**
  * 지출 목록 테이블 컴포넌트.
@@ -14,6 +16,7 @@ import ExpenseForm from "./ExpenseForm";
  * @param {number} month - 조회 월
  */
 const ExpenseList = ({ year, month }) => {
+  const toast = useToast();
   // 지출 목록 데이터
   const [expenses, setExpenses] = useState([]);
   // 전체 건수
@@ -28,6 +31,8 @@ const ExpenseList = ({ year, month }) => {
   const [editingExpense, setEditingExpense] = useState(null);
   // 신규 입력 폼 표시 여부
   const [showForm, setShowForm] = useState(false);
+  // 삭제 확인 다이얼로그 상태
+  const [confirmState, setConfirmState] = useState({ open: false, targetId: null, targetName: "" });
 
   /** 지출 목록 데이터 불러오기 */
   const loadExpenses = useCallback(async () => {
@@ -55,15 +60,26 @@ const ExpenseList = ({ year, month }) => {
     fetchCategories().then(setCategories).catch(console.error);
   }, []);
 
-  /** 지출 항목 삭제 핸들러 */
-  const handleDelete = async (expenseId, description) => {
-    if (!window.confirm(`"${description}" 항목을 삭제하시겠습니까?`)) return;
+  /** 삭제 버튼 클릭 → 확인 다이얼로그 열기 */
+  const handleDeleteClick = (expenseId, description) => {
+    setConfirmState({ open: true, targetId: expenseId, targetName: description });
+  };
+
+  /** 삭제 확인 → 실제 삭제 실행 */
+  const handleDeleteConfirm = async () => {
+    const id = confirmState.targetId;
+    setConfirmState({ open: false, targetId: null, targetName: "" });
     try {
-      await deleteExpense(expenseId);
+      await deleteExpense(id);
       await loadExpenses();
     } catch (err) {
-      alert(err.message || "삭제 중 오류가 발생했습니다.");
+      toast.error(err.message || "삭제 중 오류가 발생했습니다.");
     }
+  };
+
+  /** 삭제 취소 */
+  const handleDeleteCancel = () => {
+    setConfirmState({ open: false, targetId: null, targetName: "" });
   };
 
   /** 저장 성공 후 처리 */
@@ -75,6 +91,16 @@ const ExpenseList = ({ year, month }) => {
 
   return (
     <div className="bg-white rounded-lg shadow">
+      {/* 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={confirmState.open}
+        title="지출 항목 삭제"
+        message={`"${confirmState.targetName}" 항목을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`}
+        confirmText="삭제"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
       {/* 헤더 영역 */}
       <div className="flex items-center justify-between p-6 border-b border-slate-100">
         <h3 className="text-base font-semibold text-slate-900">
@@ -187,7 +213,7 @@ const ExpenseList = ({ year, month }) => {
                       </button>
                       {/* 삭제 버튼 */}
                       <button
-                        onClick={() => handleDelete(expense.id, expense.description)}
+                        onClick={() => handleDeleteClick(expense.id, expense.description)}
                         className="text-slate-400 hover:text-red-500 transition-colors"
                         title="삭제"
                       >

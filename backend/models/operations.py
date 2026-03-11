@@ -5,7 +5,7 @@
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -29,8 +29,8 @@ class Notice(Base):
     author = Column(String(50), nullable=True, comment="작성자")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<Notice(id={self.id}, title={self.title}, type={self.notice_type})>"
@@ -54,8 +54,8 @@ class HygieneChecklist(Base):
     sort_order = Column(Integer, default=0, comment="정렬 순서")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 점검 기록과의 관계
     records = relationship("HygieneRecord", back_populates="checklist_item")
@@ -82,8 +82,8 @@ class HygieneRecord(Base):
     inspector = Column(String(50), nullable=True, comment="점검자")
     # 비고/메모
     memo = Column(Text, nullable=True, comment="비고")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 체크리스트 항목과의 관계
     checklist_item = relationship("HygieneChecklist", back_populates="records")
@@ -112,8 +112,8 @@ class BusinessDay(Base):
     target_sales = Column(Float, nullable=True, comment="당일 매출 목표 (원)")
     # 날씨 (선택적 기록)
     weather = Column(String(50), nullable=True, comment="날씨 (맑음/흐림/비/눈 등)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     def __repr__(self):
         return f"<BusinessDay(id={self.id}, date={self.business_date}, status={self.status})>"
@@ -137,8 +137,8 @@ class TaskChecklist(Base):
     sort_order = Column(Integer, default=0, comment="정렬 순서")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 완료 기록과의 관계
     records = relationship("TaskRecord", back_populates="task_item")
@@ -165,8 +165,8 @@ class TaskRecord(Base):
     completed_by = Column(String(50), nullable=True, comment="완료자")
     # 비고
     memo = Column(Text, nullable=True, comment="비고")
-    created_at = Column(DateTime, default=func.now(), comment="생성일시")
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), comment="수정일시")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
 
     # 업무 항목과의 관계
     task_item = relationship("TaskChecklist", back_populates="records")

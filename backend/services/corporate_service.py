@@ -8,6 +8,7 @@ from sqlalchemy import func, and_
 from typing import Optional, List
 from models.corporate import Partner, DividendRecord, CorporateExpense
 from models.accounting import SalesRecord, ExpenseRecord
+from models.sales_analysis import PosSalesRaw
 from schemas.corporate import (
     PartnerCreate, PartnerUpdate,
     DividendRecordCreate, DividendRecordUpdate,
@@ -144,6 +145,43 @@ def seed_default_partners(db: Session) -> None:
 
 
 # ─────────────────────────────────────────
+# 법인세 계산 (법인세법 기준)
+# ─────────────────────────────────────────
+
+# 2026년 법인세율 구간 (법인세법 제55조)
+# 과세표준 2억 이하: 9%
+# 과세표준 2억 초과 ~ 200억 이하: 1,800만원 + (2억 초과분 × 19%)
+CORP_TAX_BRACKET_1_LIMIT = 200_000_000       # 2억 원
+CORP_TAX_BRACKET_1_RATE = 0.09               # 9%
+CORP_TAX_BRACKET_2_RATE = 0.19               # 19%
+CORP_TAX_BRACKET_1_MAX = 18_000_000          # 2억 × 9% = 1,800만원
+
+# 배당소득세율 (소득세법 제129조)
+DIVIDEND_INCOME_TAX_RATE = 0.14              # 배당소득세 14%
+DIVIDEND_LOCAL_TAX_RATE = 0.014              # 지방소득세 1.4%
+DIVIDEND_WITHHOLDING_RATE = DIVIDEND_INCOME_TAX_RATE + DIVIDEND_LOCAL_TAX_RATE  # 합계 15.4%
+
+
+def _calculate_corporate_tax(taxable_income: float) -> float:
+    """
+    법인세 자동 계산 (법인세법 제55조, 2026년 기준).
+    - 과세표준 2억 이하: 9%
+    - 과세표준 2억 초과 ~ 200억 이하: 1,800만원 + (초과분 × 19%)
+    음수 소득(손실)의 경우 법인세는 0원.
+    """
+    if taxable_income <= 0:
+        return 0.0
+
+    if taxable_income <= CORP_TAX_BRACKET_1_LIMIT:
+        # 과세표준 2억 이하: 전액 9%
+        return round(taxable_income * CORP_TAX_BRACKET_1_RATE)
+    else:
+        # 과세표준 2억 초과: 1,800만원 + 초과분 × 19%
+        excess = taxable_income - CORP_TAX_BRACKET_1_LIMIT
+        return round(CORP_TAX_BRACKET_1_MAX + excess * CORP_TAX_BRACKET_2_RATE)
+
+
+# ─────────────────────────────────────────
 # 배당 정산 서비스
 # ─────────────────────────────────────────
 
@@ -152,38 +190,68 @@ def simulate_dividend(
 ) -> DividendSimulationResponse:
     """
     배당 시뮬레이션을 실행합니다.
-    순이익과 배당 비율을 입력받아 동업자별 예상 배당금을 계산합니다.
+    법인세 차감 후 세후 순이익 기준으로 배당금을 계산하고,
+    배당소득세 원천징수(15.4%)를 반영한 세후 실수령액을 산출합니다.
     DB에 저장하지 않고 계산 결과만 반환합니다.
     """
     partners = get_all_partners(db)
     if not partners:
         raise ValueError("등록된 동업자가 없습니다. 먼저 동업자를 등록해주세요.")
 
-    # 배당 대상 금액 계산 (순이익 × 배당 비율)
-    distributable_amount = request.annual_net_profit * (request.distribution_ratio / 100.0)
+    # 법인세 계산 (#7: 법인세법 반영)
+    if request.corporate_tax_mode == "manual" and request.corporate_tax_manual is not None:
+        # 세무사 확정 법인세 직접 입력 모드
+        corporate_tax = round(request.corporate_tax_manual)
+    else:
+        # 자동 계산 모드 (법인세법 제55조 누진세율)
+        corporate_tax = _calculate_corporate_tax(request.annual_net_profit)
+
+    # 세후 순이익 = 세전 순이익 - 법인세
+    after_tax_profit = request.annual_net_profit - corporate_tax
+
+    # 배당 대상 금액 = 세후 순이익 × 배당 비율
+    distributable_amount = after_tax_profit * (request.distribution_ratio / 100.0)
 
     items = []
     total_dividend = 0.0
+    total_withholding_tax = 0.0
+    total_net_dividend = 0.0
 
     for partner in partners:
-        # 지분율에 따른 배당금 계산
-        dividend_amount = distributable_amount * (partner.equity_ratio / 100.0)
+        # 지분율에 따른 세전 배당금 계산
+        dividend_amount = round(distributable_amount * (partner.equity_ratio / 100.0))
+
+        # 배당소득세 원천징수 계산 (#8: 소득세법 제129조)
+        # 배당소득세 14% + 지방소득세 1.4% = 15.4%
+        withholding_tax = round(dividend_amount * DIVIDEND_WITHHOLDING_RATE)
+
+        # 세후 실수령액
+        net_dividend = dividend_amount - withholding_tax
+
         total_dividend += dividend_amount
+        total_withholding_tax += withholding_tax
+        total_net_dividend += net_dividend
 
         items.append(DividendSimulationItem(
             partner_id=partner.id,
             partner_name=partner.name,
             equity_ratio=partner.equity_ratio,
-            dividend_amount=round(dividend_amount),
+            dividend_amount=dividend_amount,
+            withholding_tax=withholding_tax,
+            net_dividend=net_dividend,
         ))
 
     return DividendSimulationResponse(
         year=request.year,
         annual_net_profit=request.annual_net_profit,
+        corporate_tax=corporate_tax,
+        after_tax_profit=round(after_tax_profit),
         distribution_ratio=request.distribution_ratio,
         distributable_amount=round(distributable_amount),
         items=items,
         total_dividend=round(total_dividend),
+        total_withholding_tax=round(total_withholding_tax),
+        total_net_dividend=round(total_net_dividend),
     )
 
 
@@ -204,13 +272,23 @@ def create_dividend_records(
 ) -> List[DividendRecord]:
     """
     배당 정산을 확정하고 DB에 저장합니다.
+    법인세 차감 후 세후 순이익 기준으로 배당금을 계산하며,
     동일 연도에 이미 배당 기록이 있으면 upsert(업데이트) 방식으로 처리합니다.
     """
     partners = get_all_partners(db)
     if not partners:
         raise ValueError("등록된 동업자가 없습니다.")
 
-    distributable_amount = request.annual_net_profit * (request.distribution_ratio / 100.0)
+    # 법인세 계산 (#7)
+    if request.corporate_tax_mode == "manual" and request.corporate_tax_manual is not None:
+        corporate_tax = round(request.corporate_tax_manual)
+    else:
+        corporate_tax = _calculate_corporate_tax(request.annual_net_profit)
+
+    # 세후 순이익 기준 배당 대상 금액 계산
+    after_tax_profit = request.annual_net_profit - corporate_tax
+    distributable_amount = after_tax_profit * (request.distribution_ratio / 100.0)
+
     records = []
 
     for partner in partners:
@@ -412,12 +490,13 @@ def get_corporate_overview(db: Session, year: int) -> CorporateOverviewResponse:
     연도별 법인 재무 개요를 계산합니다.
     세무/회계 모듈의 매출/지출 데이터와 법인 비용을 종합 집계합니다.
     """
-    # 연도 범위 문자열 (YYYY-01-01 ~ YYYY-12-31)
+    # 연도 범위 문자열 (YYYY-01-01 ~ 다음 해 첫날 미만)
     date_start = f"{year}-01-01"
-    date_end = f"{year}-12-31"
+    date_end_exclusive = f"{year + 1}-01-01"  # end_date < 조건용 (12-31 포함)
 
-    # 연간 매출 집계 (sales_records 테이블)
-    revenue_row = (
+    # 연간 매출 집계 — 수동 입력(is_pos_synced=0) + POS 원본(PosSalesRaw) 합산
+    # 이중 계산 방지: is_pos_synced==1 은 POS 연동 확정 기록으로 PosSalesRaw와 중복이므로 제외
+    manual_revenue_row = (
         db.query(
             func.coalesce(func.sum(SalesRecord.cash_amount), 0).label("cash"),
             func.coalesce(func.sum(SalesRecord.card_amount), 0).label("card"),
@@ -425,19 +504,39 @@ def get_corporate_overview(db: Session, year: int) -> CorporateOverviewResponse:
         )
         .filter(
             SalesRecord.sales_date >= date_start,
-            SalesRecord.sales_date <= date_end,
+            SalesRecord.sales_date < date_end_exclusive,
             SalesRecord.is_deleted == 0,
+            SalesRecord.is_pos_synced == 0,
         )
         .first()
     )
-    annual_revenue = (revenue_row.cash + revenue_row.card + revenue_row.delivery) if revenue_row else 0.0
+    manual_revenue = (
+        (manual_revenue_row.cash + manual_revenue_row.card + manual_revenue_row.delivery)
+        if manual_revenue_row
+        else 0.0
+    )
+
+    # POS 원본 연간 매출 집계 (취소 제외)
+    pos_revenue_result = (
+        db.query(func.coalesce(func.sum(PosSalesRaw.total_price), 0).label("pos_total"))
+        .filter(
+            PosSalesRaw.sale_date >= date_start,
+            PosSalesRaw.sale_date < date_end_exclusive,
+            PosSalesRaw.is_deleted == 0,
+            PosSalesRaw.is_cancelled == False,
+        )
+        .first()
+    )
+    pos_revenue = float(pos_revenue_result.pos_total or 0)
+
+    annual_revenue = manual_revenue + pos_revenue
 
     # 연간 매장 운영비 집계 (expense_records 테이블)
     operating_expense = (
         db.query(func.coalesce(func.sum(ExpenseRecord.amount + ExpenseRecord.vat), 0))
         .filter(
             ExpenseRecord.expense_date >= date_start,
-            ExpenseRecord.expense_date <= date_end,
+            ExpenseRecord.expense_date < date_end_exclusive,
             ExpenseRecord.is_deleted == 0,
         )
         .scalar()
@@ -477,9 +576,10 @@ def get_corporate_overview(db: Session, year: int) -> CorporateOverviewResponse:
     # 전년 대비 순이익 증감률 계산
     prev_year = year - 1
     prev_date_start = f"{prev_year}-01-01"
-    prev_date_end = f"{prev_year}-12-31"
+    prev_date_end_exclusive = f"{year}-01-01"  # 전년 12월 31일 포함을 위한 미만 조건
 
-    prev_revenue_row = (
+    # 전년 수동 입력 매출 집계 (is_pos_synced=0 만 포함)
+    prev_manual_revenue_row = (
         db.query(
             func.coalesce(func.sum(SalesRecord.cash_amount), 0).label("cash"),
             func.coalesce(func.sum(SalesRecord.card_amount), 0).label("card"),
@@ -487,22 +587,38 @@ def get_corporate_overview(db: Session, year: int) -> CorporateOverviewResponse:
         )
         .filter(
             SalesRecord.sales_date >= prev_date_start,
-            SalesRecord.sales_date <= prev_date_end,
+            SalesRecord.sales_date < prev_date_end_exclusive,
             SalesRecord.is_deleted == 0,
+            SalesRecord.is_pos_synced == 0,
         )
         .first()
     )
-    prev_annual_revenue = (
-        (prev_revenue_row.cash + prev_revenue_row.card + prev_revenue_row.delivery)
-        if prev_revenue_row
+    prev_manual_revenue = (
+        (prev_manual_revenue_row.cash + prev_manual_revenue_row.card + prev_manual_revenue_row.delivery)
+        if prev_manual_revenue_row
         else 0.0
     )
+
+    # 전년 POS 원본 매출 집계 (취소 제외)
+    prev_pos_revenue_result = (
+        db.query(func.coalesce(func.sum(PosSalesRaw.total_price), 0).label("pos_total"))
+        .filter(
+            PosSalesRaw.sale_date >= prev_date_start,
+            PosSalesRaw.sale_date < prev_date_end_exclusive,
+            PosSalesRaw.is_deleted == 0,
+            PosSalesRaw.is_cancelled == False,
+        )
+        .first()
+    )
+    prev_pos_revenue = float(prev_pos_revenue_result.pos_total or 0)
+
+    prev_annual_revenue = prev_manual_revenue + prev_pos_revenue
 
     prev_operating_expense = (
         db.query(func.coalesce(func.sum(ExpenseRecord.amount + ExpenseRecord.vat), 0))
         .filter(
             ExpenseRecord.expense_date >= prev_date_start,
-            ExpenseRecord.expense_date <= prev_date_end,
+            ExpenseRecord.expense_date < prev_date_end_exclusive,
             ExpenseRecord.is_deleted == 0,
         )
         .scalar()
@@ -524,16 +640,29 @@ def get_corporate_overview(db: Session, year: int) -> CorporateOverviewResponse:
             (annual_net_profit - prev_net_profit) / abs(prev_net_profit) * 100, 1
         )
 
-    # 파트너별 예상 배당금 계산 (100% 배당 가정)
+    # 파트너별 예상 배당금 계산 (100% 배당 가정, 법인세·배당소득세 반영)
     partners = get_all_partners(db)
     partner_dividends = []
+    if annual_net_profit > 0:
+        # 법인세 자동 계산 후 세후 순이익 기준 배당
+        overview_corporate_tax = _calculate_corporate_tax(annual_net_profit)
+        overview_after_tax_profit = annual_net_profit - overview_corporate_tax
+    else:
+        overview_after_tax_profit = 0.0
+
     for partner in partners:
-        dividend_amount = round(annual_net_profit * (partner.equity_ratio / 100.0)) if annual_net_profit > 0 else 0
+        # 세전 배당금 (세후 순이익 × 지분율)
+        dividend_amount = round(overview_after_tax_profit * (partner.equity_ratio / 100.0)) if overview_after_tax_profit > 0 else 0
+        # 배당소득세 원천징수 (15.4%)
+        withholding_tax = round(dividend_amount * DIVIDEND_WITHHOLDING_RATE)
+        net_dividend = dividend_amount - withholding_tax
         partner_dividends.append(DividendSimulationItem(
             partner_id=partner.id,
             partner_name=partner.name,
             equity_ratio=partner.equity_ratio,
             dividend_amount=dividend_amount,
+            withholding_tax=withholding_tax,
+            net_dividend=net_dividend,
         ))
 
     return CorporateOverviewResponse(

@@ -3,9 +3,10 @@
 // 신규 등록과 기존 정보 수정을 모두 처리합니다.
 // ============================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Save, User } from "lucide-react";
 import { createEmployee, updateEmployee } from "../../../api/employeeApi";
+import { useToast } from "../../../contexts/ToastContext";
 
 // 고용 형태 옵션
 const EMPLOYMENT_TYPE_OPTIONS = [
@@ -35,6 +36,19 @@ const BANK_OPTIONS = [
  * @param {function} onSaved - 저장 완료 콜백
  */
 const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
+  const toast = useToast();
+  // 첫 번째 입력 필드 포커스용 ref
+  const firstInputRef = useRef(null);
+
+  // Escape 키로 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleKeyDown);
+    // 모달 열릴 때 첫 번째 입력 필드로 포커스 이동
+    firstInputRef.current?.focus();
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   // 폼 데이터 상태
   const [form, setForm] = useState({
     name: "",
@@ -150,29 +164,38 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
       }
       onSaved();
     } catch (err) {
-      alert(`저장 중 오류가 발생했습니다: ${err.message}`);
+      toast.error(`저장 중 오류가 발생했습니다: ${err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    // 모달 오버레이
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    // 모달 오버레이 — 배경 클릭 시 닫기
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="presentation"
+    >
       {/* 모달 본문 */}
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="employee-form-modal-title"
+        className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      >
         {/* 모달 헤더 */}
         <div className="flex items-center justify-between p-6 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <User size={20} className="text-blue-500" />
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 id="employee-form-modal-title" className="text-lg font-semibold text-slate-900">
               {employee ? "직원 정보 수정" : "직원 등록"}
             </h2>
           </div>
           <button
             onClick={onClose}
             className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
-            title="닫기"
+            aria-label="닫기"
           >
             <X size={18} className="text-slate-500" />
           </button>
@@ -187,6 +210,7 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
                 이름 <span className="text-red-500">*</span>
               </label>
               <input
+                ref={firstInputRef}
                 type="text"
                 name="name"
                 value={form.name}

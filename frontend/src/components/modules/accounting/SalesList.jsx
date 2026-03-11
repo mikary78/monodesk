@@ -7,12 +7,17 @@ import { useState, useEffect, useCallback } from "react";
 import { Plus, Edit2, Trash2, TrendingUp } from "lucide-react";
 import { fetchSales, deleteSales, formatCurrency, formatDateKo } from "../../../api/accountingApi";
 import SalesForm from "./SalesForm";
+import { useToast } from "../../../contexts/ToastContext";
+import ConfirmDialog from "../../common/ConfirmDialog";
 
 const SalesList = ({ year, month }) => {
+  const toast = useToast();
   const [salesList, setSalesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  // 삭제 확인 다이얼로그 상태
+  const [confirmState, setConfirmState] = useState({ open: false, targetId: null });
 
   const loadSales = useCallback(async () => {
     setLoading(true);
@@ -30,14 +35,26 @@ const SalesList = ({ year, month }) => {
     loadSales();
   }, [loadSales]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("이 매출 기록을 삭제하시겠습니까?")) return;
+  // 삭제 버튼 클릭 → 확인 다이얼로그 열기
+  const handleDeleteClick = (id) => {
+    setConfirmState({ open: true, targetId: id });
+  };
+
+  // 삭제 확인 → 실제 삭제 실행
+  const handleDeleteConfirm = async () => {
+    const id = confirmState.targetId;
+    setConfirmState({ open: false, targetId: null });
     try {
       await deleteSales(id);
       await loadSales();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     }
+  };
+
+  // 삭제 취소
+  const handleDeleteCancel = () => {
+    setConfirmState({ open: false, targetId: null });
   };
 
   const handleEdit = (item) => {
@@ -69,6 +86,16 @@ const SalesList = ({ year, month }) => {
 
   return (
     <div>
+      {/* 삭제 확인 다이얼로그 */}
+      <ConfirmDialog
+        isOpen={confirmState.open}
+        title="매출 기록 삭제"
+        message="이 매출 기록을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+        confirmText="삭제"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
       {/* 신규 입력 폼 */}
       {showForm && (
         <SalesForm onSuccess={handleFormSuccess} onCancel={handleFormCancel} />
@@ -175,7 +202,7 @@ const SalesList = ({ year, month }) => {
                         <Edit2 size={13} />
                       </button>
                       <button
-                        onClick={() => handleDelete(item.id)}
+                        onClick={() => handleDeleteClick(item.id)}
                         className="p-1 text-slate-400 hover:text-red-500 rounded"
                         title="삭제"
                       >

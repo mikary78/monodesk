@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional
 from models.accounting import ExpenseCategory, ExpenseRecord, SalesRecord
+from models.sales_analysis import PosSalesRaw
 from schemas.accounting import (
     ExpenseCategoryCreate, ExpenseCategoryUpdate,
     ExpenseRecordCreate, ExpenseRecordUpdate,
@@ -202,30 +203,73 @@ def delete_sales(db: Session, sales_id: int) -> bool:
 # 손익 계산 서비스
 # ─────────────────────────────────────────
 
-def calculate_profit_loss(db: Session, year: int, month: int) -> ProfitLossResponse:
+def _get_combined_sales(db: Session, start_date: str, end_date: str) -> dict:
     """
-    월별 손익 계산.
-    매출에서 총 지출을 빼서 순이익과 이익률을 계산합니다.
-    """
-    # 날짜 범위 설정
-    start_date = f"{year}-{month:02d}-01"
-    end_date = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+    이중 저장 구조를 고려한 매출 합산 내부 유틸.
 
-    # 매출 합계 집계
-    sales_result = db.query(
+    데이터 소스:
+    1. SalesRecord (수동 입력): is_pos_synced == 0 인 레코드만 포함
+       - is_pos_synced == 1 은 POS 연동 확정 기록이므로 중복 방지를 위해 제외
+    2. PosSalesRaw (POS CSV 원본): 취소되지 않은 레코드의 total_price 합산
+
+    두 소스를 합산하여 전체 매출로 반환합니다.
+    """
+    # 수동 입력 매출 (is_pos_synced == 0 만 포함)
+    manual_result = db.query(
         func.coalesce(func.sum(SalesRecord.cash_amount), 0).label("cash"),
         func.coalesce(func.sum(SalesRecord.card_amount), 0).label("card"),
         func.coalesce(func.sum(SalesRecord.delivery_amount), 0).label("delivery"),
     ).filter(
         SalesRecord.is_deleted == 0,
+        SalesRecord.is_pos_synced == 0,
         SalesRecord.sales_date >= start_date,
         SalesRecord.sales_date < end_date
     ).first()
 
-    cash_sales = float(sales_result.cash or 0)
-    card_sales = float(sales_result.card or 0)
-    delivery_sales = float(sales_result.delivery or 0)
-    total_sales = cash_sales + card_sales + delivery_sales
+    manual_cash = float(manual_result.cash or 0)
+    manual_card = float(manual_result.card or 0)
+    manual_delivery = float(manual_result.delivery or 0)
+    manual_total = manual_cash + manual_card + manual_delivery
+
+    # POS 원본 매출 집계 (취소 제외)
+    pos_result = db.query(
+        func.coalesce(func.sum(PosSalesRaw.total_price), 0).label("pos_total")
+    ).filter(
+        PosSalesRaw.is_deleted == 0,
+        PosSalesRaw.is_cancelled == False,
+        PosSalesRaw.sale_date >= start_date,
+        PosSalesRaw.sale_date < end_date
+    ).first()
+
+    pos_total = float(pos_result.pos_total or 0)
+
+    return {
+        "cash": manual_cash,
+        "card": manual_card,
+        "delivery": manual_delivery,
+        "manual_total": manual_total,
+        "pos_total": pos_total,
+        "total": manual_total + pos_total,
+    }
+
+
+def calculate_profit_loss(db: Session, year: int, month: int) -> ProfitLossResponse:
+    """
+    월별 손익 계산.
+    수동 입력 매출(SalesRecord, is_pos_synced=0)과 POS 원본 매출(PosSalesRaw)을
+    합산하여 이중 계산 없이 전체 매출을 집계합니다.
+    """
+    # 날짜 범위 설정
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+
+    # 수동 입력 + POS 원본 합산 매출 집계
+    sales_data = _get_combined_sales(db, start_date, end_date)
+
+    cash_sales = sales_data["cash"]
+    card_sales = sales_data["card"]
+    delivery_sales = sales_data["delivery"]
+    total_sales = sales_data["total"]
 
     # 지출 카테고리별 집계
     expense_by_category = db.query(
@@ -260,23 +304,14 @@ def calculate_profit_loss(db: Session, year: int, month: int) -> ProfitLossRespo
     gross_profit = total_sales - total_expense
     profit_margin = (gross_profit / total_sales * 100) if total_sales > 0 else 0
 
-    # 전월 매출 조회 (증감률 계산용)
+    # 전월 매출 조회 (증감률 계산용 — 동일하게 수동+POS 합산)
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
     prev_start = f"{prev_year}-{prev_month:02d}-01"
     prev_end = f"{year}-{month:02d}-01"
 
-    prev_sales_result = db.query(
-        func.coalesce(func.sum(
-            SalesRecord.cash_amount + SalesRecord.card_amount + SalesRecord.delivery_amount
-        ), 0).label("total")
-    ).filter(
-        SalesRecord.is_deleted == 0,
-        SalesRecord.sales_date >= prev_start,
-        SalesRecord.sales_date < prev_end
-    ).first()
-
-    prev_month_sales = float(prev_sales_result.total or 0)
+    prev_sales_data = _get_combined_sales(db, prev_start, prev_end)
+    prev_month_sales = prev_sales_data["total"]
     sales_growth_rate = None
     if prev_month_sales > 0:
         sales_growth_rate = ((total_sales - prev_month_sales) / prev_month_sales) * 100
