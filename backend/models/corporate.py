@@ -167,3 +167,51 @@ class CorporateExpense(Base):
 
     def __repr__(self):
         return f"<CorporateExpense(id={self.id}, date={self.expense_date}, amount={self.amount})>"
+
+
+class ShareholderMeeting(Base):
+    """
+    주주총회 의사록 테이블.
+    상법 제373조에 따라 주주총회 의사록을 10년간 보관해야 합니다.
+    정기총회 및 임시총회 의사록을 관리합니다.
+    """
+    __tablename__ = "shareholder_meetings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # 개최일 (YYYY-MM-DD)
+    meeting_date = Column(String(10), nullable=False, comment="개최일 YYYY-MM-DD")
+
+    # 회의 유형 (정기총회 또는 임시총회)
+    meeting_type = Column(String(30), nullable=False, default="정기총회", comment="정기총회|임시총회")
+
+    # 의사록 제목
+    title = Column(String(200), nullable=False, comment="의사록 제목")
+
+    # 개최 장소
+    location = Column(String(200), nullable=True, comment="개최 장소")
+
+    # 안건 목록 (줄바꿈으로 구분하여 저장)
+    agenda = Column(Text, nullable=True, comment="안건 목록 (줄바꿈 구분)")
+
+    # 결의 사항
+    resolution = Column(Text, nullable=True, comment="결의 사항")
+
+    # 참석자 정보 JSON 문자열
+    # 형식: [{"partner_id": 1, "name": "동업자A", "equity": 29.0, "is_present": true}, ...]
+    attendees_json = Column(Text, nullable=True, comment="참석자 정보 JSON [{partner_id, name, equity, is_present}]")
+
+    # 의사록 상태 (초안 작성 중 또는 확정 완료)
+    status = Column(String(20), default="초안", comment="초안|확정")
+
+    # 작성자
+    created_by = Column(String(50), nullable=True, comment="작성자")
+
+    # 소프트 삭제
+    is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
+
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    def __repr__(self):
+        return f"<ShareholderMeeting(id={self.id}, date={self.meeting_date}, type={self.meeting_type}, status={self.status})>"

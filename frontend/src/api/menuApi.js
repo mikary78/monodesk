@@ -171,6 +171,26 @@ export async function seedMenuCategories() {
 }
 
 // ─────────────────────────────────────────
+// 재고 품목 연동 API (메뉴 재료 연결용)
+// ─────────────────────────────────────────
+
+/**
+ * 재고 품목 목록 조회 — 재료 추가/수정 시 드롭다운에서 사용합니다.
+ * 재고 모듈의 /api/inventory/items 엔드포인트를 호출합니다.
+ * @returns {Promise<Array>} 재고 품목 배열
+ */
+export async function fetchInventoryItemsForMenu() {
+  const response = await fetch("http://localhost:8000/api/inventory/items", {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    // 재고 API 호출 실패 시 조용히 빈 배열 반환 (재료 직접 입력으로 대체 가능)
+    return [];
+  }
+  return response.json();
+}
+
+// ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
 

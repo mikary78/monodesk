@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import create_tables
-from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations
+from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations, ocr
 
 # 프론트엔드 빌드 결과물 경로 (frontend/dist)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,6 +52,7 @@ app.include_router(menu.router, prefix="/api/menu", tags=["메뉴 관리"])
 app.include_router(employee.router, prefix="/api/employee", tags=["직원 관리"])
 app.include_router(corporate.router, prefix="/api/corporate", tags=["법인 관리"])
 app.include_router(operations.router, prefix="/api/operations", tags=["운영 관리"])
+app.include_router(ocr.router, prefix="/api/ocr", tags=["영수증 OCR"])
 
 
 @app.get("/health")
@@ -59,6 +60,12 @@ def health_check():
     """헬스 체크 엔드포인트"""
     return {"status": "ok"}
 
+
+# uploads 정적 파일 서빙 (영수증 이미지 미리보기용)
+# 프로젝트 루트의 uploads/ 폴더를 /uploads 경로로 노출합니다.
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # React SPA 정적 파일 서빙 (빌드된 경우에만)
 if os.path.exists(FRONTEND_DIST):

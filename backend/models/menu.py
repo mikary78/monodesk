@@ -116,7 +116,13 @@ class MenuIngredient(Base):
     # 재료명 (직접 입력 또는 재고 품목 이름)
     ingredient_name = Column(String(100), nullable=False, comment="재료명")
     # 재고 품목 연동 ID (선택 사항 — 재고 모듈과 연결 시 사용)
-    inventory_item_id = Column(Integer, nullable=True, comment="재고 품목 ID (선택)")
+    # ondelete="SET NULL": 재고 품목 삭제 시 레시피 재료는 유지하되 연결만 해제
+    inventory_item_id = Column(
+        Integer,
+        ForeignKey("inventory_items.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="재고 품목 ID (선택)"
+    )
     # 사용 수량
     quantity = Column(Float, nullable=False, comment="사용 수량")
     # 단위 (g, ml, 개 등)

@@ -6,7 +6,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import Optional, List
-from models.corporate import Partner, DividendRecord, CorporateExpense
+from models.corporate import Partner, DividendRecord, CorporateExpense, ShareholderMeeting
 from models.accounting import SalesRecord, ExpenseRecord
 from models.sales_analysis import PosSalesRaw
 from schemas.corporate import (
@@ -15,6 +15,7 @@ from schemas.corporate import (
     DividendSimulationRequest, DividendSimulationResponse, DividendSimulationItem,
     CorporateExpenseCreate, CorporateExpenseUpdate,
     CorporateOverviewResponse,
+    ShareholderMeetingCreate, ShareholderMeetingUpdate,
 )
 
 
@@ -686,3 +687,180 @@ def get_corporate_overview(db: Session, year: int) -> CorporateOverviewResponse:
         expense_by_category=expense_by_category,
         yoy_profit_growth=yoy_profit_growth,
     )
+
+
+# ─────────────────────────────────────────
+# 주주총회 의사록 서비스
+# 상법 제373조 — 10년 보관 의무
+# ─────────────────────────────────────────
+
+def get_meetings(
+    db: Session,
+    skip: int = 0,
+    limit: int = 50,
+) -> dict:
+    """
+    주주총회 의사록 목록을 조회합니다.
+    최신 개최일 순(내림차순)으로 정렬합니다.
+    """
+    query = (
+        db.query(ShareholderMeeting)
+        .filter(ShareholderMeeting.is_deleted == 0)
+    )
+    total = query.count()
+    items = (
+        query.order_by(ShareholderMeeting.meeting_date.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return {"total": total, "items": items}
+
+
+def get_meeting(db: Session, meeting_id: int) -> Optional[ShareholderMeeting]:
+    """주주총회 의사록 단건 조회"""
+    return (
+        db.query(ShareholderMeeting)
+        .filter(ShareholderMeeting.id == meeting_id, ShareholderMeeting.is_deleted == 0)
+        .first()
+    )
+
+
+def create_meeting(db: Session, data: ShareholderMeetingCreate) -> ShareholderMeeting:
+    """
+    주주총회 의사록을 새로 등록합니다.
+    """
+    meeting = ShareholderMeeting(**data.model_dump())
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+
+def update_meeting(
+    db: Session, meeting_id: int, data: ShareholderMeetingUpdate
+) -> Optional[ShareholderMeeting]:
+    """
+    주주총회 의사록을 수정합니다.
+    부분 수정(PATCH 방식)을 지원합니다.
+    """
+    meeting = get_meeting(db, meeting_id)
+    if not meeting:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(meeting, key, value)
+
+    db.commit()
+    db.refresh(meeting)
+    return meeting
+
+
+def delete_meeting(db: Session, meeting_id: int) -> bool:
+    """
+    주주총회 의사록을 소프트 삭제합니다.
+    상법 제373조 10년 보관 의무에 따라 완전 삭제 대신 소프트 삭제를 사용합니다.
+    """
+    meeting = get_meeting(db, meeting_id)
+    if not meeting:
+        return False
+
+    meeting.is_deleted = 1
+    db.commit()
+    return True
+
+
+def generate_meeting_draft_from_dividend(
+    db: Session, dividend_year: int
+) -> ShareholderMeeting:
+    """
+    특정 연도의 배당 결의 기준으로 주주총회 의사록 초안을 자동 생성합니다.
+    배당 패널에서 배당을 확정한 뒤 의사록 초안을 빠르게 작성할 때 활용합니다.
+
+    생성 규칙:
+    - 회의 유형: 정기총회 (연말 배당 결의)
+    - 제목: {연도}년도 정기주주총회 — 배당 결의
+    - 안건: 배당금 지급의 건 자동 생성
+    - 결의 사항: 동업자별 배당금 내역 자동 채워 넣기
+    - 참석자: 현재 등록된 동업자 전원 (is_present=True)
+    - 상태: 초안
+    """
+    import json
+
+    # 해당 연도 배당 기록 조회
+    dividend_records = get_dividend_records(db, dividend_year)
+
+    # 현재 등록된 동업자 목록
+    partners = get_all_partners(db)
+
+    # 참석자 JSON 생성 — 현재 동업자 전원을 참석 상태로 초기화
+    attendees = []
+    for partner in partners:
+        attendees.append({
+            "partner_id": partner.id,
+            "name": partner.name,
+            "equity": partner.equity_ratio,
+            "is_present": True,
+        })
+
+    # 안건 목록 자동 생성
+    agenda_lines = [
+        f"제1호 의안: {dividend_year}년도 재무제표 승인의 건",
+        f"제2호 의안: {dividend_year}년도 배당금 지급 결의의 건",
+    ]
+
+    # 결의 사항 자동 생성 — 배당 기록이 있으면 금액 상세 포함
+    if dividend_records:
+        resolution_lines = [
+            f"■ {dividend_year}년도 배당금 지급 결의",
+            "",
+        ]
+        for rec in dividend_records:
+            # 세전 배당금과 원천징수 정보 포함
+            wht = rec.withholding_tax or 0
+            net = rec.net_dividend or rec.dividend_amount
+            resolution_lines.append(
+                f"  · {rec.partner_name} ({rec.equity_ratio_snapshot:.0f}%): "
+                f"세전 {int(rec.dividend_amount):,}원 / 원천징수 {int(wht):,}원 / 세후 {int(net):,}원"
+            )
+        resolution_lines += [
+            "",
+            "위 안건은 출석 주주 전원의 찬성으로 원안대로 가결되었다.",
+        ]
+        resolution_text = "\n".join(resolution_lines)
+
+        # distributable_amount는 모든 동업자가 동일하므로 첫 번째 기록에서 참조
+        total_dividend = sum(int(r.dividend_amount) for r in dividend_records)
+        agenda_lines[1] = (
+            f"제2호 의안: {dividend_year}년도 배당금 지급 결의의 건 (총 {total_dividend:,}원)"
+        )
+    else:
+        # 배당 기록이 없을 경우 빈 결의 사항
+        resolution_text = (
+            f"■ {dividend_year}년도 배당금 지급 결의\n\n"
+            "(배당 정산 탭에서 배당을 확정한 후 초안을 재생성하면 금액이 자동으로 채워집니다.)\n\n"
+            "위 안건은 출석 주주 전원의 찬성으로 원안대로 가결되었다."
+        )
+
+    # 의사록 제목 및 날짜 설정
+    # 정기총회는 통상 다음 해 초에 열리므로, 결의 연도의 다음 해 3월 31일 이전으로 안내
+    draft_title = f"{dividend_year}년도 정기주주총회 의사록 (배당 결의)"
+    draft_date = f"{dividend_year + 1}-03-01"  # 초안 기본 날짜: 결의 연도 다음 해 3월 1일
+
+    # 초안 의사록 생성
+    meeting = ShareholderMeeting(
+        meeting_date=draft_date,
+        meeting_type="정기총회",
+        title=draft_title,
+        location="여남동 사무실",
+        agenda="\n".join(agenda_lines),
+        resolution=resolution_text,
+        attendees_json=json.dumps(attendees, ensure_ascii=False),
+        status="초안",
+        created_by="시스템 자동 생성",
+    )
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    return meeting

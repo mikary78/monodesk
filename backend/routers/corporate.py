@@ -13,6 +13,7 @@ from schemas.corporate import (
     DividendRecordUpdate, DividendRecordResponse,
     CorporateExpenseCreate, CorporateExpenseUpdate, CorporateExpenseResponse,
     CorporateOverviewResponse,
+    ShareholderMeetingCreate, ShareholderMeetingUpdate, ShareholderMeetingResponse,
 )
 import services.corporate_service as service
 
@@ -227,3 +228,99 @@ def get_corporate_overview(
         return service.get_corporate_overview(db, year)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"재무 개요 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+# ─────────────────────────────────────────
+# 주주총회 의사록 API
+# 주의: 정적 경로(/meetings/draft-from-dividend/{year})를
+#       동적 경로(/meetings/{id})보다 반드시 먼저 등록
+# ─────────────────────────────────────────
+
+@router.get("/meetings", response_model=dict)
+def get_meetings(
+    skip: int = Query(0, ge=0, description="페이지 오프셋"),
+    limit: int = Query(50, ge=1, le=200, description="페이지 크기"),
+    db: Session = Depends(get_db),
+):
+    """
+    주주총회 의사록 목록 조회.
+    최신 개최일 순으로 반환합니다.
+    """
+    result = service.get_meetings(db, skip, limit)
+    return {
+        "success": True,
+        "total": result["total"],
+        "items": [ShareholderMeetingResponse.model_validate(item) for item in result["items"]],
+    }
+
+
+@router.post(
+    "/meetings/draft-from-dividend/{year}",
+    response_model=ShareholderMeetingResponse,
+    status_code=201,
+)
+def generate_meeting_draft_from_dividend(year: int, db: Session = Depends(get_db)):
+    """
+    특정 연도의 배당 결의 기준으로 주주총회 의사록 초안을 자동 생성합니다.
+    배당 정산 탭에서 배당 확정 후 사용하면 안건·결의 사항이 자동으로 채워집니다.
+    """
+    try:
+        return service.generate_meeting_draft_from_dividend(db, year)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"의사록 초안 자동 생성 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/meetings/{meeting_id}", response_model=ShareholderMeetingResponse)
+def get_meeting(meeting_id: int, db: Session = Depends(get_db)):
+    """주주총회 의사록 단건 조회"""
+    meeting = service.get_meeting(db, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="해당 의사록을 찾을 수 없습니다.")
+    return meeting
+
+
+@router.post("/meetings", response_model=ShareholderMeetingResponse, status_code=201)
+def create_meeting(data: ShareholderMeetingCreate, db: Session = Depends(get_db)):
+    """주주총회 의사록 신규 작성"""
+    try:
+        return service.create_meeting(db, data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"의사록 등록 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.put("/meetings/{meeting_id}", response_model=ShareholderMeetingResponse)
+def update_meeting(
+    meeting_id: int, data: ShareholderMeetingUpdate, db: Session = Depends(get_db)
+):
+    """주주총회 의사록 수정"""
+    try:
+        result = service.update_meeting(db, meeting_id, data)
+        if not result:
+            raise HTTPException(status_code=404, detail="해당 의사록을 찾을 수 없습니다.")
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"의사록 수정 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.delete("/meetings/{meeting_id}")
+def delete_meeting(meeting_id: int, db: Session = Depends(get_db)):
+    """주주총회 의사록 삭제 (소프트 삭제 — 상법 제373조 10년 보관 의무)"""
+    success = service.delete_meeting(db, meeting_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 의사록을 찾을 수 없습니다.")
+    return {"success": True, "message": "의사록이 삭제되었습니다."}

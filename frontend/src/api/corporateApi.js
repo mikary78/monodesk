@@ -245,3 +245,93 @@ export const fetchCorporateOverview = async (year) => {
   if (!res.ok) throw new Error("법인 재무 개요를 불러오는 데 실패했습니다.");
   return res.json();
 };
+
+
+// ─────────────────────────────────────────
+// 주주총회 의사록 API
+// 상법 제373조 — 10년 보관 의무
+// ─────────────────────────────────────────
+
+/**
+ * 의사록 목록 조회
+ * @param {Object} params - { skip?, limit? }
+ */
+export const fetchMeetings = async ({ skip = 0, limit = 50 } = {}) => {
+  const params = new URLSearchParams({ skip, limit });
+  const res = await fetch(`${BASE_URL}/meetings?${params}`);
+  if (!res.ok) throw new Error("의사록 목록을 불러오는 데 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 의사록 단건 조회
+ * @param {number} meetingId
+ */
+export const fetchMeetingById = async (meetingId) => {
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`);
+  if (!res.ok) throw new Error("의사록을 불러오는 데 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 의사록 신규 작성
+ * @param {Object} data - { meeting_date, meeting_type, title, location?, agenda?, resolution?, attendees_json?, status?, created_by? }
+ */
+export const createMeeting = async (data) => {
+  const res = await fetch(`${BASE_URL}/meetings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "의사록 등록에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 의사록 수정
+ * @param {number} meetingId
+ * @param {Object} data
+ */
+export const updateMeeting = async (meetingId, data) => {
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "의사록 수정에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 의사록 삭제 (소프트 삭제)
+ * @param {number} meetingId
+ */
+export const deleteMeeting = async (meetingId) => {
+  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("의사록 삭제에 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 배당 기반 의사록 초안 자동 생성
+ * 배당 정산을 확정한 연도를 기준으로 주주총회 의사록 초안을 자동 작성합니다.
+ * @param {number} year - 배당 결의 연도
+ */
+export const generateMeetingDraftFromDividend = async (year) => {
+  const res = await fetch(`${BASE_URL}/meetings/draft-from-dividend/${year}`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "의사록 초안 자동 생성에 실패했습니다.");
+  }
+  return res.json();
+};

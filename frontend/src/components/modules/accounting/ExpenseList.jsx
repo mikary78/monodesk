@@ -4,11 +4,12 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from "react";
-import { Pencil, Trash2, Plus, Search } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, ScanLine } from "lucide-react";
 import { fetchExpenses, deleteExpense, fetchCategories, formatCurrency } from "../../../api/accountingApi";
 import ExpenseForm from "./ExpenseForm";
 import { useToast } from "../../../contexts/ToastContext";
 import ConfirmDialog from "../../common/ConfirmDialog";
+import ReceiptScanner from "../../common/ReceiptScanner";
 
 /**
  * 지출 목록 테이블 컴포넌트.
@@ -33,6 +34,8 @@ const ExpenseList = ({ year, month }) => {
   const [showForm, setShowForm] = useState(false);
   // 삭제 확인 다이얼로그 상태
   const [confirmState, setConfirmState] = useState({ open: false, targetId: null, targetName: "" });
+  // 영수증 스캐너 모달 표시 여부
+  const [showReceiptScanner, setShowReceiptScanner] = useState(false);
 
   /** 지출 목록 데이터 불러오기 */
   const loadExpenses = useCallback(async () => {
@@ -91,6 +94,16 @@ const ExpenseList = ({ year, month }) => {
 
   return (
     <div className="bg-white rounded-lg shadow">
+      {/* 영수증 OCR 스캐너 모달 */}
+      <ReceiptScanner
+        isOpen={showReceiptScanner}
+        onClose={() => setShowReceiptScanner(false)}
+        onSuccess={() => {
+          // 저장 완료 후 지출 목록 갱신
+          loadExpenses();
+        }}
+      />
+
       {/* 삭제 확인 다이얼로그 */}
       <ConfirmDialog
         isOpen={confirmState.open}
@@ -107,13 +120,25 @@ const ExpenseList = ({ year, month }) => {
           지출 내역
           <span className="ml-2 text-sm font-normal text-slate-400">총 {total}건</span>
         </h3>
-        <button
-          onClick={() => { setShowForm(true); setEditingExpense(null); }}
-          className="h-9 px-4 bg-blue-500 text-white rounded-md text-sm font-semibold hover:bg-blue-600 flex items-center gap-1 transition-colors"
-        >
-          <Plus size={14} />
-          지출 입력
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 영수증 스캔 버튼 — OCR 자동 입력 */}
+          <button
+            onClick={() => setShowReceiptScanner(true)}
+            className="h-9 px-4 bg-emerald-500 text-white rounded-md text-sm font-semibold hover:bg-emerald-600 flex items-center gap-1 transition-colors"
+            title="영수증/거래명세서를 스캔하여 자동으로 지출 및 재고를 등록합니다"
+          >
+            <ScanLine size={14} />
+            영수증 스캔
+          </button>
+          {/* 수동 입력 버튼 */}
+          <button
+            onClick={() => { setShowForm(true); setEditingExpense(null); }}
+            className="h-9 px-4 bg-blue-500 text-white rounded-md text-sm font-semibold hover:bg-blue-600 flex items-center gap-1 transition-colors"
+          >
+            <Plus size={14} />
+            지출 입력
+          </button>
+        </div>
       </div>
 
       {/* 신규 입력 또는 수정 폼 */}

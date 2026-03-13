@@ -13,11 +13,13 @@ import {
   DollarSign,
   Receipt,
   BarChart2,
+  ScrollText,
 } from "lucide-react";
 import PartnerList from "../components/modules/corporate/PartnerList";
 import DividendPanel from "../components/modules/corporate/DividendPanel";
 import CorporateExpenseList from "../components/modules/corporate/CorporateExpenseList";
 import CorporateOverview from "../components/modules/corporate/CorporateOverview";
+import MeetingMinutesTab from "../components/modules/corporate/MeetingMinutesTab";
 
 // 탭 메뉴 정의
 const TABS = [
@@ -25,6 +27,7 @@ const TABS = [
   { id: "partners",  label: "동업자 현황", Icon: Users },
   { id: "dividend",  label: "배당 정산",   Icon: DollarSign },
   { id: "expenses",  label: "법인 비용",   Icon: Receipt },
+  { id: "meetings",  label: "주주총회",    Icon: ScrollText },
 ];
 
 const CorporatePage = () => {
@@ -121,6 +124,11 @@ const CorporatePage = () => {
         {/* 법인 비용 탭 */}
         {activeTab === "expenses" && (
           <CorporateExpenseList year={year} />
+        )}
+
+        {/* 주주총회 의사록 탭 */}
+        {activeTab === "meetings" && (
+          <MeetingMinutesTab year={year} />
         )}
       </div>
     </div>

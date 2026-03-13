@@ -4,7 +4,7 @@
 # ============================================================
 
 from pydantic import BaseModel, field_validator, Field, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 
@@ -256,3 +256,131 @@ class CorporateOverviewResponse(BaseModel):
     expense_by_category: List[dict]
     # 전년 대비 순이익 증감률 (%)
     yoy_profit_growth: Optional[float] = None
+
+
+# ─────────────────────────────────────────
+# 주주총회 의사록 (ShareholderMeeting) 스키마
+# 상법 제373조 — 10년 보관 의무
+# ─────────────────────────────────────────
+
+class ShareholderMeetingCreate(BaseModel):
+    """주주총회 의사록 생성 요청 스키마 (Pydantic V2)"""
+
+    # 개최일 (YYYY-MM-DD)
+    meeting_date: str = Field(..., description="개최일 (YYYY-MM-DD)")
+
+    # 회의 유형: 정기총회 또는 임시총회
+    meeting_type: str = Field("정기총회", description="정기총회|임시총회")
+
+    # 의사록 제목
+    title: str = Field(..., min_length=1, max_length=200, description="의사록 제목")
+
+    # 개최 장소
+    location: Optional[str] = Field(None, max_length=200, description="개최 장소")
+
+    # 안건 목록 (줄바꿈 구분)
+    agenda: Optional[str] = Field(None, description="안건 목록 (줄바꿈 구분)")
+
+    # 결의 사항
+    resolution: Optional[str] = Field(None, description="결의 사항")
+
+    # 참석자 정보 JSON 문자열
+    # 예: '[{"partner_id":1,"name":"동업자A","equity":29.0,"is_present":true}]'
+    attendees_json: Optional[str] = Field(None, description="참석자 정보 JSON 문자열")
+
+    # 의사록 상태
+    status: Optional[str] = Field("초안", description="초안|확정")
+
+    # 작성자
+    created_by: Optional[str] = Field(None, max_length=50, description="작성자")
+
+    @field_validator("meeting_date")
+    @classmethod
+    def validate_meeting_date(cls, v):
+        """개최일 날짜 형식 검증 (YYYY-MM-DD)"""
+        import re
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요.")
+        return v
+
+    @field_validator("meeting_type")
+    @classmethod
+    def validate_meeting_type(cls, v):
+        """회의 유형 유효성 검증"""
+        allowed = ["정기총회", "임시총회"]
+        if v not in allowed:
+            raise ValueError(f"회의 유형은 {', '.join(allowed)} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        """상태 유효성 검증"""
+        if v is not None:
+            allowed = ["초안", "확정"]
+            if v not in allowed:
+                raise ValueError(f"상태는 {', '.join(allowed)} 중 하나여야 합니다.")
+        return v
+
+
+class ShareholderMeetingUpdate(BaseModel):
+    """주주총회 의사록 수정 요청 스키마 (부분 수정 허용)"""
+
+    meeting_date: Optional[str] = None
+    meeting_type: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    location: Optional[str] = None
+    agenda: Optional[str] = None
+    resolution: Optional[str] = None
+    attendees_json: Optional[str] = None
+    status: Optional[str] = None
+    created_by: Optional[str] = None
+
+    @field_validator("meeting_date")
+    @classmethod
+    def validate_meeting_date(cls, v):
+        """개최일 날짜 형식 검증"""
+        import re
+        if v is not None and not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식으로 입력해주세요.")
+        return v
+
+    @field_validator("meeting_type")
+    @classmethod
+    def validate_meeting_type(cls, v):
+        """회의 유형 유효성 검증"""
+        if v is not None:
+            allowed = ["정기총회", "임시총회"]
+            if v not in allowed:
+                raise ValueError(f"회의 유형은 {', '.join(allowed)} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v):
+        """상태 유효성 검증"""
+        if v is not None:
+            allowed = ["초안", "확정"]
+            if v not in allowed:
+                raise ValueError(f"상태는 {', '.join(allowed)} 중 하나여야 합니다.")
+        return v
+
+
+class ShareholderMeetingResponse(BaseModel):
+    """주주총회 의사록 응답 스키마"""
+
+    id: int
+    meeting_date: str
+    meeting_type: str
+    title: str
+    location: Optional[str] = None
+    agenda: Optional[str] = None
+    resolution: Optional[str] = None
+    # JSON 문자열로 반환 (프론트엔드에서 JSON.parse 처리)
+    attendees_json: Optional[str] = None
+    status: str
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
