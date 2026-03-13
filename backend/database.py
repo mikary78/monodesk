@@ -63,4 +63,5 @@ def create_tables():
     import models.employee   # noqa: F401 — 직원 관리 모델
     import models.corporate   # noqa: F401 — 법인 관리 모델
     import models.operations  # noqa: F401 — 운영 관리 모델
+    import models.document    # noqa: F401 — 문서 관리 모델 (지결서·회의록)
     Base.metadata.create_all(bind=engine)

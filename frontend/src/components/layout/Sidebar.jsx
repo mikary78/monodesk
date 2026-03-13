@@ -6,7 +6,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, DollarSign, TrendingUp, Package,
-  UtensilsCrossed, Users, Building2, ClipboardList, Settings,
+  UtensilsCrossed, Users, Building2, ClipboardList, FileText, Settings,
 } from "lucide-react";
 
 // 사이드바 메뉴 목록 (모듈 개발 우선순위 순서)
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { path: "/employee",  label: "직원 관리",   Icon: Users },
   { path: "/corporate", label: "법인 관리",   Icon: Building2 },
   { path: "/operations",label: "운영 관리",   Icon: ClipboardList },
+  { path: "/documents", label: "문서 관리",   Icon: FileText },
 ];
 
 /**

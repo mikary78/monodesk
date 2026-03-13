@@ -15,6 +15,7 @@ import EmployeePage from "./pages/EmployeePage";
 import CorporatePage from "./pages/CorporatePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
 import OperationsPage from "./pages/OperationsPage";
+import DocumentPage from "./pages/DocumentPage";
 import { ToastProvider } from "./contexts/ToastContext";
 
 const App = () => {
@@ -47,6 +48,9 @@ const App = () => {
 
           {/* 8순위 — 운영 관리 (구현 완료) */}
           <Route path="/operations" element={<OperationsPage />} />
+
+          {/* 문서 관리 (구현 완료) */}
+          <Route path="/documents" element={<DocumentPage />} />
 
           {/* 설정 (미구현) */}
           <Route path="/settings"   element={<ComingSoonPage />} />

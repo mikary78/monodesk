@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import create_tables
-from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations, ocr
+from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations, ocr, document
 
 # 프론트엔드 빌드 결과물 경로 (frontend/dist)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,6 +53,7 @@ app.include_router(employee.router, prefix="/api/employee", tags=["직원 관리
 app.include_router(corporate.router, prefix="/api/corporate", tags=["법인 관리"])
 app.include_router(operations.router, prefix="/api/operations", tags=["운영 관리"])
 app.include_router(ocr.router, prefix="/api/ocr", tags=["영수증 OCR"])
+app.include_router(document.router, prefix="/api/documents", tags=["문서 관리"])
 
 
 @app.get("/health")
