@@ -101,14 +101,16 @@ const MenuList = () => {
     item.name.toLowerCase().includes(searchText.toLowerCase())
   );
 
-  // 메뉴 저장 핸들러 (등록/수정)
+  // 메뉴 저장 핸들러 (등록/수정) — 생성된 아이템 반환 (신규 등록 후 재료 등록 유도에 사용)
   const handleSaveItem = async (formData) => {
+    let result;
     if (editingItem) {
-      await updateMenuItem(editingItem.id, formData);
+      result = await updateMenuItem(editingItem.id, formData);
     } else {
-      await createMenuItem(formData);
+      result = await createMenuItem(formData);
     }
     await loadItems();
+    return result;
   };
 
   // 메뉴 삭제 버튼 클릭 → 확인 다이얼로그 열기
@@ -330,13 +332,14 @@ const MenuList = () => {
                   {/* 관리 버튼 */}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
-                      {/* 재료 관리 */}
+                      {/* 재료 관리 — 아이콘+텍스트 뱃지 형태로 표시하여 가시성 향상 */}
                       <button
                         onClick={() => handleOpenIngredients(item)}
-                        className="w-7 h-7 flex items-center justify-center rounded hover:bg-purple-50 text-slate-400 hover:text-purple-500"
+                        className="flex items-center gap-1 px-2 h-7 rounded text-xs font-medium hover:bg-purple-50 text-slate-500 hover:text-purple-600 border border-transparent hover:border-purple-200"
                         title="구성 재료 관리"
                       >
-                        <FlaskConical size={14} />
+                        <FlaskConical size={12} />
+                        재료
                       </button>
                       {/* 대표 메뉴 토글 */}
                       <button
@@ -374,8 +377,9 @@ const MenuList = () => {
       {/* 메뉴 등록/수정 모달 */}
       <MenuItemModal
         isOpen={itemModalOpen}
-        onClose={() => setItemModalOpen(false)}
+        onClose={() => { setItemModalOpen(false); setEditingItem(null); }}
         onSave={handleSaveItem}
+        onManageIngredients={handleOpenIngredients}
         item={editingItem}
         categories={categories}
       />

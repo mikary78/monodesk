@@ -4,7 +4,7 @@
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { X, Save } from "lucide-react";
+import { X, Save, FlaskConical, CheckCircle } from "lucide-react";
 
 // 초기 폼 상태 정의
 const INITIAL_FORM = {
@@ -18,11 +18,13 @@ const INITIAL_FORM = {
   is_featured: 0,
 };
 
-const MenuItemModal = ({ isOpen, onClose, onSave, item, categories }) => {
+const MenuItemModal = ({ isOpen, onClose, onSave, onManageIngredients, item, categories }) => {
   // 폼 데이터 상태 관리
   const [form, setForm] = useState(INITIAL_FORM);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  // 신규 저장 완료 후 재료 등록 유도 상태
+  const [savedItem, setSavedItem] = useState(null);
 
   // 수정 모드일 때 기존 데이터로 폼 초기화
   useEffect(() => {
@@ -41,6 +43,7 @@ const MenuItemModal = ({ isOpen, onClose, onSave, item, categories }) => {
       setForm(INITIAL_FORM);
     }
     setErrors({});
+    setSavedItem(null);
   }, [item, isOpen]);
 
   // 폼 필드 변경 핸들러
@@ -74,13 +77,19 @@ const MenuItemModal = ({ isOpen, onClose, onSave, item, categories }) => {
     }
     setLoading(true);
     try {
-      await onSave({
+      const result = await onSave({
         ...form,
         category_id: Number(form.category_id),
         price: Number(form.price),
         cost: form.cost !== "" ? Number(form.cost) : 0,
       });
-      onClose();
+      if (isEditMode) {
+        // 수정 모드: 바로 닫기
+        onClose();
+      } else {
+        // 신규 등록: 재료 등록 유도 화면 표시
+        setSavedItem(result);
+      }
     } catch (err) {
       setErrors({ submit: err.message });
     } finally {
@@ -100,6 +109,42 @@ const MenuItemModal = ({ isOpen, onClose, onSave, item, categories }) => {
 
       {/* 모달 본문 */}
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
+
+        {/* ── 신규 저장 완료 후: 재료 등록 유도 화면 ── */}
+        {savedItem && (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <CheckCircle size={48} className="text-green-500 mb-3" />
+            <h3 className="text-base font-semibold text-slate-900 mb-1">
+              "{savedItem.name}" 메뉴가 등록되었습니다!
+            </h3>
+            <p className="text-sm text-slate-500 mb-6">
+              구성 재료(주재료·채소·양념 등)를 지금 바로 등록하시겠습니까?
+            </p>
+            <div className="flex gap-3">
+              {/* 나중에 닫기 */}
+              <button
+                onClick={onClose}
+                className="h-9 px-5 border border-slate-200 rounded-md text-sm text-slate-600 hover:bg-slate-50"
+              >
+                나중에 등록
+              </button>
+              {/* 재료 바로 등록 */}
+              <button
+                onClick={() => {
+                  onClose();
+                  if (onManageIngredients) onManageIngredients(savedItem);
+                }}
+                className="h-9 px-5 bg-purple-500 text-white rounded-md text-sm font-medium hover:bg-purple-600 flex items-center gap-2"
+              >
+                <FlaskConical size={15} />
+                재료 바로 등록하기
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── 일반 폼 (저장 전) ── */}
+        {!savedItem && <>
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold text-slate-900">
@@ -259,24 +304,40 @@ const MenuItemModal = ({ isOpen, onClose, onSave, item, categories }) => {
           </div>
 
           {/* 하단 버튼 */}
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-9 px-4 border border-slate-200 rounded-md text-sm text-slate-700 hover:bg-slate-50"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="h-9 px-4 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
-            >
-              <Save size={14} />
-              {loading ? "저장 중..." : isEditMode ? "수정하기" : "등록하기"}
-            </button>
+          <div className="flex justify-between items-center pt-2">
+            {/* 수정 모드: 재료 관리 버튼 (좌측) */}
+            {isEditMode && onManageIngredients ? (
+              <button
+                type="button"
+                onClick={() => { onClose(); onManageIngredients(item); }}
+                className="flex items-center gap-1.5 h-9 px-4 border border-purple-200 rounded-md text-sm text-purple-600 hover:bg-purple-50 font-medium"
+              >
+                <FlaskConical size={14} />
+                재료 관리
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-9 px-4 border border-slate-200 rounded-md text-sm text-slate-700 hover:bg-slate-50"
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="h-9 px-4 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Save size={14} />
+                {loading ? "저장 중..." : isEditMode ? "수정하기" : "등록하기"}
+              </button>
+            </div>
           </div>
         </form>
+        </>}
       </div>
     </div>
   );

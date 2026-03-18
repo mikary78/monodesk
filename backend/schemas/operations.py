@@ -359,3 +359,114 @@ class DailyTaskSummary(BaseModel):
     completed: int
     completion_rate: float
     tasks: List[dict]
+
+
+# ─────────────────────────────────────────
+# 거래처 관리 스키마
+# ─────────────────────────────────────────
+
+class VendorCreate(BaseModel):
+    """거래처 생성 요청 스키마"""
+    name: str
+    category: str = "기타"         # 식자재 / 주류 / 소모품 / 기타
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    payment_day: Optional[int] = None
+    payment_method: str = "계좌이체"  # 카드 / 계좌이체 / 현금
+    memo: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """거래처명 공백 검사"""
+        if not v.strip():
+            raise ValueError("거래처명을 입력해주세요.")
+        return v.strip()
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """카테고리 유효성 검사"""
+        allowed = {"식자재", "주류", "소모품", "기타"}
+        if v not in allowed:
+            raise ValueError(f"카테고리는 {allowed} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("payment_method")
+    @classmethod
+    def validate_payment_method(cls, v: str) -> str:
+        """결제방법 유효성 검사"""
+        allowed = {"카드", "계좌이체", "현금"}
+        if v not in allowed:
+            raise ValueError(f"결제방법은 {allowed} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("payment_day")
+    @classmethod
+    def validate_payment_day(cls, v: Optional[int]) -> Optional[int]:
+        """결제일 범위 검사 (1~31)"""
+        if v is not None and not (1 <= v <= 31):
+            raise ValueError("결제일은 1~31 사이의 숫자여야 합니다.")
+        return v
+
+
+class VendorUpdate(BaseModel):
+    """거래처 수정 요청 스키마"""
+    name: Optional[str] = None
+    category: Optional[str] = None
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    payment_day: Optional[int] = None
+    payment_method: Optional[str] = None
+    memo: Optional[str] = None
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: Optional[str]) -> Optional[str]:
+        """카테고리 유효성 검사"""
+        if v is not None:
+            allowed = {"식자재", "주류", "소모품", "기타"}
+            if v not in allowed:
+                raise ValueError(f"카테고리는 {allowed} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("payment_method")
+    @classmethod
+    def validate_payment_method(cls, v: Optional[str]) -> Optional[str]:
+        """결제방법 유효성 검사"""
+        if v is not None:
+            allowed = {"카드", "계좌이체", "현금"}
+            if v not in allowed:
+                raise ValueError(f"결제방법은 {allowed} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("payment_day")
+    @classmethod
+    def validate_payment_day(cls, v: Optional[int]) -> Optional[int]:
+        """결제일 범위 검사 (1~31)"""
+        if v is not None and not (1 <= v <= 31):
+            raise ValueError("결제일은 1~31 사이의 숫자여야 합니다.")
+        return v
+
+
+class VendorResponse(BaseModel):
+    """거래처 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    category: str
+    contact_name: Optional[str]
+    phone: Optional[str]
+    bank_name: Optional[str]
+    account_number: Optional[str]
+    payment_day: Optional[int]
+    payment_method: str
+    memo: Optional[str]
+    is_deleted: int
+    created_at: datetime
+    updated_at: datetime

@@ -4,6 +4,7 @@
 # POST /api/ocr/confirm-receipt — 검토 완료 후 지출+재고 동시 저장
 # ============================================================
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -84,9 +85,14 @@ async def scan_receipt(
         logger.error(f"이미지 저장 실패: {e}")
         raise HTTPException(status_code=400, detail=f"이미지 저장 중 오류가 발생했습니다: {str(e)}")
 
-    # OCR 텍스트 추출
+    # OCR 텍스트 추출 — blocking 작업을 스레드 풀에서 실행 (이벤트 루프 블록 방지)
     try:
-        raw_text = ocr_service.extract_text(image_bytes)
+        loop = asyncio.get_event_loop()
+        raw_text = await loop.run_in_executor(
+            ocr_service._ocr_executor,
+            ocr_service.extract_text,
+            image_bytes,
+        )
     except RuntimeError as e:
         logger.error(f"OCR 처리 실패: {e}")
         # OCR 실패해도 이미지는 저장해 두고, 수동 입력 가능하도록 응답

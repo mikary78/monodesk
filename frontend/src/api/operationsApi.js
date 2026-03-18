@@ -365,3 +365,71 @@ export const seedTaskChecklists = async () => {
   if (!res.ok) throw new Error("업무 체크리스트 초기화에 실패했습니다.");
   return res.json();
 };
+
+
+// ─────────────────────────────────────────
+// 거래처 관리 API
+// ─────────────────────────────────────────
+
+/**
+ * 거래처 목록 조회
+ * @param {object} params - { category, search }
+ */
+export const fetchVendors = async ({ category, search } = {}) => {
+  const params = new URLSearchParams();
+  if (category) params.append("category", category);
+  if (search) params.append("search", search);
+
+  const query = params.toString() ? `?${params}` : "";
+  const res = await fetch(`${BASE_URL}/vendors${query}`);
+  if (!res.ok) throw new Error("거래처 목록을 불러오지 못했습니다.");
+  return res.json();
+};
+
+/**
+ * 거래처 등록
+ * @param {object} data - 거래처 정보
+ */
+export const createVendor = async (data) => {
+  const res = await fetch(`${BASE_URL}/vendors`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "거래처 등록에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 거래처 수정
+ * @param {number} vendorId - 거래처 ID
+ * @param {object} data - 수정할 필드
+ */
+export const updateVendor = async (vendorId, data) => {
+  const res = await fetch(`${BASE_URL}/vendors/${vendorId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "거래처 수정에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 거래처 삭제 (소프트 삭제)
+ * @param {number} vendorId - 거래처 ID
+ */
+export const deleteVendor = async (vendorId) => {
+  const res = await fetch(`${BASE_URL}/vendors/${vendorId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "거래처 삭제에 실패했습니다.");
+  }
+  return res.json();
+};

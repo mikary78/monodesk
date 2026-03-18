@@ -8,7 +8,7 @@ from sqlalchemy import and_
 from typing import Optional, List
 from models.operations import (
     Notice, HygieneChecklist, HygieneRecord, BusinessDay,
-    TaskChecklist, TaskRecord
+    TaskChecklist, TaskRecord, Vendor
 )
 from schemas.operations import (
     NoticeCreate, NoticeUpdate,
@@ -17,6 +17,7 @@ from schemas.operations import (
     BusinessDayCreate, BusinessDayUpdate,
     TaskChecklistCreate, TaskChecklistUpdate,
     TaskRecordCreate, TaskRecordUpdate,
+    VendorCreate, VendorUpdate,
 )
 
 
@@ -661,3 +662,85 @@ def seed_default_task_checklists(db: Session) -> None:
         db.add(checklist)
 
     db.commit()
+
+
+# ─────────────────────────────────────────
+# 거래처 관리 서비스
+# ─────────────────────────────────────────
+
+def get_all_vendors(
+    db: Session,
+    category: Optional[str] = None,
+    search: Optional[str] = None
+) -> List[Vendor]:
+    """
+    거래처 목록 조회.
+    카테고리 필터 및 거래처명/담당자 검색 지원.
+    소프트 삭제된 항목은 제외합니다.
+    """
+    query = db.query(Vendor).filter(Vendor.is_deleted == 0)
+
+    # 카테고리 필터 적용
+    if category:
+        query = query.filter(Vendor.category == category)
+
+    # 검색어 필터 (거래처명 또는 담당자명)
+    if search:
+        query = query.filter(
+            Vendor.name.contains(search) | Vendor.contact_name.contains(search)
+        )
+
+    return query.order_by(Vendor.category.asc(), Vendor.name.asc()).all()
+
+
+def create_vendor(db: Session, data: VendorCreate) -> Vendor:
+    """거래처 등록"""
+    vendor = Vendor(
+        name=data.name,
+        category=data.category,
+        contact_name=data.contact_name,
+        phone=data.phone,
+        bank_name=data.bank_name,
+        account_number=data.account_number,
+        payment_day=data.payment_day,
+        payment_method=data.payment_method,
+        memo=data.memo,
+    )
+    db.add(vendor)
+    db.commit()
+    db.refresh(vendor)
+    return vendor
+
+
+def update_vendor(db: Session, vendor_id: int, data: VendorUpdate) -> Optional[Vendor]:
+    """거래처 수정"""
+    vendor = db.query(Vendor).filter(
+        Vendor.id == vendor_id,
+        Vendor.is_deleted == 0
+    ).first()
+
+    if not vendor:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(vendor, field, value)
+
+    db.commit()
+    db.refresh(vendor)
+    return vendor
+
+
+def delete_vendor(db: Session, vendor_id: int) -> bool:
+    """거래처 소프트 삭제"""
+    vendor = db.query(Vendor).filter(
+        Vendor.id == vendor_id,
+        Vendor.is_deleted == 0
+    ).first()
+
+    if not vendor:
+        return False
+
+    vendor.is_deleted = 1
+    db.commit()
+    return True

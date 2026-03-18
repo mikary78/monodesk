@@ -15,6 +15,7 @@ from schemas.operations import (
     BusinessDayCreate, BusinessDayUpdate, BusinessDayResponse,
     TaskChecklistCreate, TaskChecklistUpdate, TaskChecklistResponse,
     TaskRecordCreate, TaskRecordUpdate, TaskRecordResponse,
+    VendorCreate, VendorUpdate, VendorResponse,
 )
 import services.operations_service as service
 
@@ -305,3 +306,47 @@ def seed_task_checklists(db: Session = Depends(get_db)):
     """기본 업무 체크리스트 항목 초기화 (최초 설정 시 1회 사용)"""
     service.seed_default_task_checklists(db)
     return {"success": True, "message": "기본 업무 체크리스트 항목이 생성되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 거래처 관리 API
+# ─────────────────────────────────────────
+
+@router.get("/vendors", response_model=list[VendorResponse])
+def get_vendors(
+    category: Optional[str] = Query(None, description="카테고리 필터 (식자재/주류/소모품/기타)"),
+    search: Optional[str] = Query(None, description="거래처명 또는 담당자명 검색"),
+    db: Session = Depends(get_db)
+):
+    """
+    거래처 목록 조회.
+    카테고리 필터 및 검색어 지원. 카테고리→이름 순 정렬.
+    """
+    return service.get_all_vendors(db, category, search)
+
+
+@router.post("/vendors", response_model=VendorResponse, status_code=201)
+def create_vendor(data: VendorCreate, db: Session = Depends(get_db)):
+    """거래처 등록"""
+    try:
+        return service.create_vendor(db, data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"거래처 등록 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.put("/vendors/{vendor_id}", response_model=VendorResponse)
+def update_vendor(vendor_id: int, data: VendorUpdate, db: Session = Depends(get_db)):
+    """거래처 정보 수정"""
+    result = service.update_vendor(db, vendor_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 거래처를 찾을 수 없습니다.")
+    return result
+
+
+@router.delete("/vendors/{vendor_id}")
+def delete_vendor(vendor_id: int, db: Session = Depends(get_db)):
+    """거래처 소프트 삭제"""
+    success = service.delete_vendor(db, vendor_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 거래처를 찾을 수 없습니다.")
+    return {"success": True, "message": "거래처가 삭제되었습니다."}

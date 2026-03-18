@@ -7,12 +7,16 @@ import os
 import re
 import logging
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
 import pytesseract
 from PIL import Image
 import io
+
+# OCR 작업용 스레드 풀 (blocking 작업을 async 환경에서 실행)
+_ocr_executor = ThreadPoolExecutor(max_workers=2)
 
 from sqlalchemy.orm import Session
 from models.inventory import InventoryItem
@@ -41,7 +45,8 @@ logger = logging.getLogger(__name__)
 def preprocess_image(image_bytes: bytes) -> np.ndarray:
     """
     OCR 정확도 향상을 위한 이미지 전처리.
-    그레이스케일 → 노이즈 제거 → 적응형 이진화 → 기울기 보정 순서로 처리합니다.
+    그레이스케일 → 크기 제한 → 이진화 순서로 처리합니다.
+    기울기 보정은 처리 시간이 길어 제외합니다.
 
     Args:
         image_bytes: 업로드된 이미지 바이트
@@ -51,6 +56,14 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     """
     # 바이트 → PIL → numpy 배열 변환
     pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    # 너무 큰 이미지는 OCR 속도 저하 → 최대 2000px로 축소
+    max_dim = 2000
+    w, h = pil_image.size
+    if max(w, h) > max_dim:
+        scale = max_dim / max(w, h)
+        pil_image = pil_image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
     img_array = np.array(pil_image)
 
     # BGR 변환 (OpenCV 기본 형식)
@@ -62,18 +75,8 @@ def preprocess_image(image_bytes: bytes) -> np.ndarray:
     # 가우시안 블러로 노이즈 제거
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    # 적응형 이진화 (조명 불균일 환경에 강인)
-    binary = cv2.adaptiveThreshold(
-        blurred,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11,  # 블록 크기
-        2    # 상수값
-    )
-
-    # 기울기 보정 처리
-    binary = _deskew(binary)
+    # Otsu 이진화 (영수증처럼 흑백 대비가 높은 이미지에 적합, 속도 빠름)
+    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     return binary
 
@@ -146,11 +149,13 @@ def extract_text(image_bytes: bytes) -> str:
         # PIL 이미지로 변환 (pytesseract 입력 형식)
         pil_image = Image.fromarray(processed)
 
-        # tessdata 경로를 환경 변수로 설정
-        tessdata_config = f'--tessdata-dir "{TESSDATA_DIR}"'
+        # tessdata 경로를 환경 변수로 설정 (공백 포함 경로 대응)
+        os.environ["TESSDATA_PREFIX"] = TESSDATA_DIR
 
-        # Tesseract OCR 실행 (한국어+영어, 페이지 세그먼트 6: 단일 블록 텍스트)
-        custom_config = f"{tessdata_config} --psm 6 --oem 3"
+        # Tesseract OCR 실행
+        # --oem 1: LSTM 신경망 모드 (--oem 3보다 빠름)
+        # --psm 6: 단일 균일 블록 텍스트로 가정
+        custom_config = "--psm 6 --oem 1"
         text = pytesseract.image_to_string(
             pil_image,
             lang="kor+eng",

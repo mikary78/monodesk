@@ -173,3 +173,38 @@ class TaskRecord(Base):
 
     def __repr__(self):
         return f"<TaskRecord(id={self.id}, date={self.record_date}, done={self.is_done})>"
+
+
+class Vendor(Base):
+    """
+    거래처 관리 테이블.
+    식자재 납품업체, 주류업체 등 거래처 정보를 관리합니다.
+    """
+    __tablename__ = "vendors"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 거래처명 (필수)
+    name = Column(String(100), nullable=False, comment="거래처명")
+    # 카테고리: 식자재/주류/소모품/기타
+    category = Column(String(30), default="기타", comment="거래처 분류 (식자재/주류/소모품/기타)")
+    # 담당자명
+    contact_name = Column(String(50), nullable=True, comment="담당자명")
+    # 연락처 (전화번호)
+    phone = Column(String(30), nullable=True, comment="연락처")
+    # 은행명
+    bank_name = Column(String(50), nullable=True, comment="은행명")
+    # 계좌번호
+    account_number = Column(String(50), nullable=True, comment="계좌번호")
+    # 결제일 (매월 며칠, 1~31)
+    payment_day = Column(Integer, nullable=True, comment="결제일 (1~31)")
+    # 결제방법: 카드/계좌이체/현금
+    payment_method = Column(String(20), default="계좌이체", comment="결제방법 (카드/계좌이체/현금)")
+    # 메모
+    memo = Column(Text, nullable=True, comment="메모")
+    # 소프트 삭제
+    is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    def __repr__(self):
+        return f"<Vendor(id={self.id}, name={self.name}, category={self.category})>"

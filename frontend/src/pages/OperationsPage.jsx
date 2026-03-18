@@ -12,18 +12,21 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  Store,
 } from "lucide-react";
 import NoticeBoard          from "../components/modules/operations/NoticeBoard";
 import HygieneCheck         from "../components/modules/operations/HygieneCheck";
 import BusinessCalendar     from "../components/modules/operations/BusinessCalendar";
 import TaskChecklistPanel   from "../components/modules/operations/TaskChecklistPanel";
+import VendorTab            from "../components/modules/operations/VendorTab";
 
-// 4개 탭 정의
+// 5개 탭 정의 (거래처 관리 추가)
 const TABS = [
   { id: "notices",   label: "공지사항",       Icon: Bell         },
   { id: "hygiene",   label: "위생 점검",       Icon: ShieldCheck  },
   { id: "calendar",  label: "영업일 관리",      Icon: CalendarDays },
   { id: "tasks",     label: "업무 체크리스트",  Icon: CheckSquare  },
+  { id: "vendors",   label: "거래처 관리",      Icon: Store        },
 ];
 
 const OperationsPage = () => {
@@ -123,6 +126,11 @@ const OperationsPage = () => {
         {/* 업무 체크리스트 탭 */}
         {activeTab === "tasks" && (
           <TaskChecklistPanel />
+        )}
+
+        {/* 거래처 관리 탭 */}
+        {activeTab === "vendors" && (
+          <VendorTab />
         )}
       </div>
     </div>
