@@ -8,7 +8,7 @@ from sqlalchemy import and_
 from typing import Optional, List
 from models.operations import (
     Notice, HygieneChecklist, HygieneRecord, BusinessDay,
-    TaskChecklist, TaskRecord, Vendor
+    TaskChecklist, TaskRecord, Vendor, DailyClosing, DailyIssue
 )
 from schemas.operations import (
     NoticeCreate, NoticeUpdate,
@@ -18,6 +18,7 @@ from schemas.operations import (
     TaskChecklistCreate, TaskChecklistUpdate,
     TaskRecordCreate, TaskRecordUpdate,
     VendorCreate, VendorUpdate,
+    DailyClosingCreate, DailyIssueCreate, DailyIssueUpdate,
 )
 
 
@@ -742,5 +743,226 @@ def delete_vendor(db: Session, vendor_id: int) -> bool:
         return False
 
     vendor.is_deleted = 1
+    db.commit()
+    return True
+
+
+# ─────────────────────────────────────────
+# 현금 시재 관리 서비스
+# ─────────────────────────────────────────
+
+def _calc_total_cash(data: DailyClosingCreate) -> int:
+    """권종별 수량 × 단위금액 합계 계산"""
+    return (
+        data.bill_100000 * 100000
+        + data.bill_50000  * 50000
+        + data.bill_10000  * 10000
+        + data.bill_5000   * 5000
+        + data.bill_1000   * 1000
+        + data.coin_500    * 500
+        + data.coin_100    * 100
+    )
+
+
+def _get_prev_day_balance(db: Session, closing_date: str) -> int:
+    """
+    해당 날짜 바로 전날의 잔액을 조회합니다.
+    전날 기록이 없으면 0을 반환합니다.
+    """
+    from datetime import date, timedelta
+    try:
+        d = date.fromisoformat(closing_date)
+        prev_date_str = (d - timedelta(days=1)).isoformat()
+    except ValueError:
+        return 0
+
+    prev = db.query(DailyClosing).filter(
+        DailyClosing.closing_date == prev_date_str
+    ).first()
+
+    return prev.balance if prev else 0
+
+
+def get_closing_by_date(db: Session, closing_date: str) -> Optional[DailyClosing]:
+    """특정 날짜 시재 조회. 없으면 None 반환."""
+    return db.query(DailyClosing).filter(
+        DailyClosing.closing_date == closing_date
+    ).first()
+
+
+def get_closing_list(db: Session, year: int, month: int) -> List[DailyClosing]:
+    """월별 시재 목록 조회 (날짜 오름차순)"""
+    start_date = f"{year:04d}-{month:02d}-01"
+    end_date = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
+
+    return (
+        db.query(DailyClosing)
+        .filter(
+            DailyClosing.closing_date >= start_date,
+            DailyClosing.closing_date < end_date,
+        )
+        .order_by(DailyClosing.closing_date.asc())
+        .all()
+    )
+
+
+def save_closing(db: Session, data: DailyClosingCreate) -> DailyClosing:
+    """
+    현금 시재 저장 (upsert).
+    total_cash = 권종 합계 자동계산
+    prev_day_cash = 전일 잔액 자동참조
+    balance = prev_day_cash + daily_deposit - daily_expense
+    """
+    total_cash = _calc_total_cash(data)
+    prev_day_cash = _get_prev_day_balance(db, data.closing_date)
+    balance = prev_day_cash + data.daily_deposit - data.daily_expense
+
+    existing = get_closing_by_date(db, data.closing_date)
+
+    if existing:
+        # 기존 기록 업데이트
+        existing.bill_100000  = data.bill_100000
+        existing.bill_50000   = data.bill_50000
+        existing.bill_10000   = data.bill_10000
+        existing.bill_5000    = data.bill_5000
+        existing.bill_1000    = data.bill_1000
+        existing.coin_500     = data.coin_500
+        existing.coin_100     = data.coin_100
+        existing.total_cash   = total_cash
+        existing.prev_day_cash = prev_day_cash
+        existing.daily_deposit = data.daily_deposit
+        existing.daily_expense = data.daily_expense
+        existing.balance      = balance
+        existing.memo         = data.memo
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    closing = DailyClosing(
+        closing_date   = data.closing_date,
+        bill_100000    = data.bill_100000,
+        bill_50000     = data.bill_50000,
+        bill_10000     = data.bill_10000,
+        bill_5000      = data.bill_5000,
+        bill_1000      = data.bill_1000,
+        coin_500       = data.coin_500,
+        coin_100       = data.coin_100,
+        total_cash     = total_cash,
+        prev_day_cash  = prev_day_cash,
+        daily_deposit  = data.daily_deposit,
+        daily_expense  = data.daily_expense,
+        balance        = balance,
+        memo           = data.memo,
+    )
+    db.add(closing)
+    db.commit()
+    db.refresh(closing)
+    return closing
+
+
+def update_closing(db: Session, closing_id: int, data: DailyClosingCreate) -> Optional[DailyClosing]:
+    """
+    시재 수정 (ID 기준).
+    total_cash, balance 재계산 포함.
+    """
+    closing = db.query(DailyClosing).filter(DailyClosing.id == closing_id).first()
+    if not closing:
+        return None
+
+    total_cash = _calc_total_cash(data)
+    prev_day_cash = _get_prev_day_balance(db, data.closing_date)
+    balance = prev_day_cash + data.daily_deposit - data.daily_expense
+
+    closing.bill_100000   = data.bill_100000
+    closing.bill_50000    = data.bill_50000
+    closing.bill_10000    = data.bill_10000
+    closing.bill_5000     = data.bill_5000
+    closing.bill_1000     = data.bill_1000
+    closing.coin_500      = data.coin_500
+    closing.coin_100      = data.coin_100
+    closing.total_cash    = total_cash
+    closing.prev_day_cash = prev_day_cash
+    closing.daily_deposit = data.daily_deposit
+    closing.daily_expense = data.daily_expense
+    closing.balance       = balance
+    closing.memo          = data.memo
+
+    db.commit()
+    db.refresh(closing)
+    return closing
+
+
+# ─────────────────────────────────────────
+# 이슈 트래킹 서비스
+# ─────────────────────────────────────────
+
+def get_issues_by_date(db: Session, issue_date: str) -> List[DailyIssue]:
+    """특정 날짜 이슈 목록 조회 (최신순)"""
+    return (
+        db.query(DailyIssue)
+        .filter(DailyIssue.issue_date == issue_date)
+        .order_by(DailyIssue.created_at.desc())
+        .all()
+    )
+
+
+def get_issues_list(db: Session, year: int, month: int) -> List[DailyIssue]:
+    """월별 이슈 목록 조회 (날짜/최신순)"""
+    start_date = f"{year:04d}-{month:02d}-01"
+    end_date = f"{year:04d}-{month + 1:02d}-01" if month < 12 else f"{year + 1:04d}-01-01"
+
+    return (
+        db.query(DailyIssue)
+        .filter(
+            DailyIssue.issue_date >= start_date,
+            DailyIssue.issue_date < end_date,
+        )
+        .order_by(DailyIssue.issue_date.asc(), DailyIssue.created_at.desc())
+        .all()
+    )
+
+
+def create_issue(db: Session, data: DailyIssueCreate) -> DailyIssue:
+    """이슈 등록"""
+    issue = DailyIssue(
+        issue_date   = data.issue_date,
+        issue_type   = data.issue_type,
+        content      = data.content,
+        action_taken = data.action_taken,
+        is_resolved  = 1 if data.is_resolved else 0,
+    )
+    db.add(issue)
+    db.commit()
+    db.refresh(issue)
+    return issue
+
+
+def update_issue(db: Session, issue_id: int, data: DailyIssueUpdate) -> Optional[DailyIssue]:
+    """이슈 수정 (처리내역 추가, 완료 처리 등)"""
+    issue = db.query(DailyIssue).filter(DailyIssue.id == issue_id).first()
+    if not issue:
+        return None
+
+    if data.issue_type is not None:
+        issue.issue_type = data.issue_type
+    if data.content is not None:
+        issue.content = data.content
+    if data.action_taken is not None:
+        issue.action_taken = data.action_taken
+    if data.is_resolved is not None:
+        issue.is_resolved = 1 if data.is_resolved else 0
+
+    db.commit()
+    db.refresh(issue)
+    return issue
+
+
+def delete_issue(db: Session, issue_id: int) -> bool:
+    """이슈 삭제 (하드 삭제)"""
+    issue = db.query(DailyIssue).filter(DailyIssue.id == issue_id).first()
+    if not issue:
+        return False
+
+    db.delete(issue)
     db.commit()
     return True

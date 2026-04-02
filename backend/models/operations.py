@@ -208,3 +208,60 @@ class Vendor(Base):
 
     def __repr__(self):
         return f"<Vendor(id={self.id}, name={self.name}, category={self.category})>"
+
+
+class DailyClosing(Base):
+    """
+    일일 현금 시재 관리 테이블.
+    날짜별 권종 수량, 이월금, 입금/지출, 잔액을 기록합니다.
+    """
+    __tablename__ = "daily_closings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 마감 날짜 (하루에 1개 레코드)
+    closing_date = Column(String(10), nullable=False, unique=True, index=True, comment="마감 날짜 (YYYY-MM-DD)")
+    # 권종별 수량
+    bill_100000 = Column(Integer, default=0, comment="십만원권 수량")
+    bill_50000  = Column(Integer, default=0, comment="오만원권 수량")
+    bill_10000  = Column(Integer, default=0, comment="만원권 수량")
+    bill_5000   = Column(Integer, default=0, comment="오천원권 수량")
+    bill_1000   = Column(Integer, default=0, comment="천원권 수량")
+    coin_500    = Column(Integer, default=0, comment="오백원 수량")
+    coin_100    = Column(Integer, default=0, comment="백원 수량")
+    # 자동계산 필드 (API에서 계산 후 저장)
+    total_cash    = Column(Integer, default=0, comment="권종별 합계 (자동계산)")
+    prev_day_cash = Column(Integer, default=0, comment="전일 이월 현금")
+    daily_deposit = Column(Integer, default=0, comment="당일 입금액")
+    daily_expense = Column(Integer, default=0, comment="당일 시재지출액")
+    balance       = Column(Integer, default=0, comment="잔액 (prev_day_cash + daily_deposit - daily_expense)")
+    memo = Column(Text, nullable=True, comment="메모")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    def __repr__(self):
+        return f"<DailyClosing(id={self.id}, date={self.closing_date}, balance={self.balance})>"
+
+
+class DailyIssue(Base):
+    """
+    일일 특이사항 이슈 트래킹 테이블.
+    고객/원재료/직원 관련 특이사항과 처리내역을 관리합니다.
+    """
+    __tablename__ = "daily_issues"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 발생 날짜
+    issue_date = Column(String(10), nullable=False, index=True, comment="발생 날짜 (YYYY-MM-DD)")
+    # 이슈 유형: customer(고객)/ingredient(원재료)/employee(직원)
+    issue_type = Column(String(20), nullable=False, comment="이슈 유형 (customer/ingredient/employee)")
+    # 특이사항 내용
+    content = Column(Text, nullable=False, comment="특이사항 내역")
+    # 처리내역 (나중에 입력 가능)
+    action_taken = Column(Text, nullable=True, comment="처리내역")
+    # 처리 완료 여부
+    is_resolved = Column(Integer, default=0, comment="처리완료 여부 (0: 미완료, 1: 완료)")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    def __repr__(self):
+        return f"<DailyIssue(id={self.id}, date={self.issue_date}, type={self.issue_type}, resolved={self.is_resolved})>"

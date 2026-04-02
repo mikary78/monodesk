@@ -16,6 +16,8 @@ from schemas.operations import (
     TaskChecklistCreate, TaskChecklistUpdate, TaskChecklistResponse,
     TaskRecordCreate, TaskRecordUpdate, TaskRecordResponse,
     VendorCreate, VendorUpdate, VendorResponse,
+    DailyClosingCreate, DailyClosingResponse,
+    DailyIssueCreate, DailyIssueUpdate, DailyIssueResponse,
 )
 import services.operations_service as service
 
@@ -350,3 +352,118 @@ def delete_vendor(vendor_id: int, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="해당 거래처를 찾을 수 없습니다.")
     return {"success": True, "message": "거래처가 삭제되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 현금 시재 API
+# ─────────────────────────────────────────
+# 주의: /closing/list 정적 경로를 /closing/{date} 동적 경로보다 먼저 등록
+
+@router.get("/closing/list", response_model=list[DailyClosingResponse])
+def get_closing_list(
+    year:  int = Query(..., ge=2020, le=2099, description="조회 연도"),
+    month: int = Query(..., ge=1, le=12, description="조회 월"),
+    db: Session = Depends(get_db),
+):
+    """월별 현금 시재 목록 조회"""
+    return service.get_closing_list(db, year, month)
+
+
+@router.get("/closing/{date}", response_model=DailyClosingResponse)
+def get_closing_by_date(date: str, db: Session = Depends(get_db)):
+    """
+    특정 날짜 시재 조회.
+    기록이 없으면 전일 잔액을 prev_day_cash로 세팅하여 빈 폼 데이터 반환.
+    """
+    closing = service.get_closing_by_date(db, date)
+    if closing:
+        return closing
+
+    # 기록 없음 → 전일 잔액 포함 빈 응답 (저장 전 폼 초기값용)
+    from datetime import datetime as _dt
+    prev_balance = service._get_prev_day_balance(db, date)
+    return DailyClosingResponse(
+        id=0,
+        closing_date=date,
+        bill_100000=0, bill_50000=0, bill_10000=0,
+        bill_5000=0, bill_1000=0, coin_500=0, coin_100=0,
+        total_cash=0,
+        prev_day_cash=prev_balance,
+        daily_deposit=0,
+        daily_expense=0,
+        balance=prev_balance,
+        memo=None,
+        created_at=_dt.utcnow(),
+        updated_at=_dt.utcnow(),
+    )
+
+
+@router.post("/closing", response_model=DailyClosingResponse, status_code=201)
+def save_closing(data: DailyClosingCreate, db: Session = Depends(get_db)):
+    """
+    현금 시재 저장 (upsert).
+    total_cash / prev_day_cash / balance 자동계산 후 저장.
+    """
+    try:
+        return service.save_closing(db, data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"시재 저장 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.put("/closing/{closing_id}", response_model=DailyClosingResponse)
+def update_closing(closing_id: int, data: DailyClosingCreate, db: Session = Depends(get_db)):
+    """시재 수정 (total_cash, balance 재계산 포함)"""
+    result = service.update_closing(db, closing_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 시재 기록을 찾을 수 없습니다.")
+    return result
+
+
+# ─────────────────────────────────────────
+# 이슈 트래킹 API
+# ─────────────────────────────────────────
+
+@router.get("/issues/list", response_model=list[DailyIssueResponse])
+def get_issues_list(
+    year:  int = Query(..., ge=2020, le=2099, description="조회 연도"),
+    month: int = Query(..., ge=1, le=12, description="조회 월"),
+    db: Session = Depends(get_db),
+):
+    """월별 이슈 목록 조회"""
+    return service.get_issues_list(db, year, month)
+
+
+@router.get("/issues", response_model=list[DailyIssueResponse])
+def get_issues_by_date(
+    date: str = Query(..., description="조회 날짜 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """특정 날짜 이슈 목록 조회"""
+    return service.get_issues_by_date(db, date)
+
+
+@router.post("/issues", response_model=DailyIssueResponse, status_code=201)
+def create_issue(data: DailyIssueCreate, db: Session = Depends(get_db)):
+    """이슈 등록"""
+    try:
+        return service.create_issue(db, data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이슈 등록 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.put("/issues/{issue_id}", response_model=DailyIssueResponse)
+def update_issue(issue_id: int, data: DailyIssueUpdate, db: Session = Depends(get_db)):
+    """이슈 수정 (처리내역 추가, 완료 처리)"""
+    result = service.update_issue(db, issue_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 이슈를 찾을 수 없습니다.")
+    return result
+
+
+@router.delete("/issues/{issue_id}")
+def delete_issue(issue_id: int, db: Session = Depends(get_db)):
+    """이슈 삭제"""
+    success = service.delete_issue(db, issue_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 이슈를 찾을 수 없습니다.")
+    return {"success": True, "message": "이슈가 삭제되었습니다."}

@@ -470,3 +470,106 @@ class VendorResponse(BaseModel):
     is_deleted: int
     created_at: datetime
     updated_at: datetime
+
+
+# ─────────────────────────────────────────
+# 일일 현금 시재 스키마
+# ─────────────────────────────────────────
+
+class DailyClosingCreate(BaseModel):
+    """현금 시재 등록/수정 요청 스키마"""
+    closing_date: str          # YYYY-MM-DD
+    bill_100000: int = 0       # 십만원권 수량
+    bill_50000:  int = 0       # 오만원권 수량
+    bill_10000:  int = 0       # 만원권 수량
+    bill_5000:   int = 0       # 오천원권 수량
+    bill_1000:   int = 0       # 천원권 수량
+    coin_500:    int = 0       # 오백원 수량
+    coin_100:    int = 0       # 백원 수량
+    daily_deposit: int = 0     # 당일 입금액
+    daily_expense: int = 0     # 당일 시재지출액
+    memo: Optional[str] = None
+
+    @field_validator("closing_date")
+    @classmethod
+    def validate_date(cls, v: str) -> str:
+        """날짜 형식 검사 (YYYY-MM-DD)"""
+        import re
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다.")
+        return v
+
+
+class DailyClosingResponse(BaseModel):
+    """현금 시재 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    closing_date: str
+    bill_100000: int
+    bill_50000:  int
+    bill_10000:  int
+    bill_5000:   int
+    bill_1000:   int
+    coin_500:    int
+    coin_100:    int
+    total_cash:    int
+    prev_day_cash: int
+    daily_deposit: int
+    daily_expense: int
+    balance:       int
+    memo: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+# ─────────────────────────────────────────
+# 일일 이슈 스키마
+# ─────────────────────────────────────────
+
+class DailyIssueCreate(BaseModel):
+    """이슈 등록 요청 스키마"""
+    issue_date: str                       # YYYY-MM-DD
+    issue_type: str                       # customer / ingredient / employee
+    content: str                          # 특이사항 내역
+    action_taken: Optional[str] = None   # 처리내역 (나중에 입력 가능)
+    is_resolved: bool = False             # 처리완료 여부
+
+    @field_validator("issue_type")
+    @classmethod
+    def validate_issue_type(cls, v: str) -> str:
+        """이슈 유형 유효성 검사"""
+        allowed = {"customer", "ingredient", "employee"}
+        if v not in allowed:
+            raise ValueError(f"이슈 유형은 {allowed} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        """내용 공백 검사"""
+        if not v.strip():
+            raise ValueError("특이사항 내용을 입력해주세요.")
+        return v.strip()
+
+
+class DailyIssueUpdate(BaseModel):
+    """이슈 수정 요청 스키마"""
+    issue_type: Optional[str] = None
+    content: Optional[str] = None
+    action_taken: Optional[str] = None
+    is_resolved: Optional[bool] = None
+
+
+class DailyIssueResponse(BaseModel):
+    """이슈 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    issue_date: str
+    issue_type: str
+    content: str
+    action_taken: Optional[str]
+    is_resolved: int
+    created_at: datetime
+    updated_at: datetime
