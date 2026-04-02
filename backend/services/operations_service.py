@@ -8,7 +8,8 @@ from sqlalchemy import and_
 from typing import Optional, List
 from models.operations import (
     Notice, HygieneChecklist, HygieneRecord, BusinessDay,
-    TaskChecklist, TaskRecord, Vendor, DailyClosing, DailyIssue
+    TaskChecklist, TaskRecord, Vendor, DailyClosing, DailyIssue,
+    FixedCostItem, FixedCostRecord
 )
 from schemas.operations import (
     NoticeCreate, NoticeUpdate,
@@ -19,6 +20,8 @@ from schemas.operations import (
     TaskRecordCreate, TaskRecordUpdate,
     VendorCreate, VendorUpdate,
     DailyClosingCreate, DailyIssueCreate, DailyIssueUpdate,
+    FixedCostItemCreate, FixedCostItemUpdate,
+    FixedCostRecordUpdate,
 )
 
 
@@ -966,3 +969,216 @@ def delete_issue(db: Session, issue_id: int) -> bool:
     db.delete(issue)
     db.commit()
     return True
+
+
+# ─────────────────────────────────────────
+# 고정비 항목 마스터 서비스
+# ─────────────────────────────────────────
+
+def get_fixed_cost_items(db: Session) -> List[FixedCostItem]:
+    """
+    고정비 항목 목록 조회.
+    카테고리 → 정렬순서 기준 정렬. 활성 항목만 반환.
+    """
+    return (
+        db.query(FixedCostItem)
+        .filter(FixedCostItem.is_active == 1)
+        .order_by(FixedCostItem.category.asc(), FixedCostItem.sort_order.asc())
+        .all()
+    )
+
+
+def create_fixed_cost_item(db: Session, data: FixedCostItemCreate) -> FixedCostItem:
+    """고정비 항목 추가"""
+    item = FixedCostItem(
+        name=data.name,
+        category=data.category,
+        vendor_name=data.vendor_name,
+        payment_day=data.payment_day,
+        default_amount=data.default_amount,
+        sort_order=data.sort_order,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def update_fixed_cost_item(
+    db: Session, item_id: int, data: FixedCostItemUpdate
+) -> Optional[FixedCostItem]:
+    """고정비 항목 수정"""
+    item = db.query(FixedCostItem).filter(
+        FixedCostItem.id == item_id,
+        FixedCostItem.is_active == 1,
+    ).first()
+    if not item:
+        return None
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(item, field, value)
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def deactivate_fixed_cost_item(db: Session, item_id: int) -> bool:
+    """고정비 항목 비활성화 (is_active = 0)"""
+    item = db.query(FixedCostItem).filter(FixedCostItem.id == item_id).first()
+    if not item:
+        return False
+
+    item.is_active = 0
+    db.commit()
+    return True
+
+
+# ─────────────────────────────────────────
+# 고정비 월별 실적 서비스
+# ─────────────────────────────────────────
+
+def _ensure_monthly_records(db: Session, year: int, month: int) -> None:
+    """
+    해당 월 고정비 레코드를 자동 생성합니다.
+    활성 항목 중 해당 월 레코드가 없으면 마스터의 default_amount를 복사해서 생성.
+    (월초 자동 세팅 효과)
+    """
+    active_items = get_fixed_cost_items(db)
+    for item in active_items:
+        exists = db.query(FixedCostRecord).filter(
+            FixedCostRecord.item_id == item.id,
+            FixedCostRecord.year == year,
+            FixedCostRecord.month == month,
+        ).first()
+        if not exists:
+            record = FixedCostRecord(
+                item_id=item.id,
+                year=year,
+                month=month,
+                default_amount=item.default_amount,
+                actual_amount=0,
+            )
+            db.add(record)
+    db.commit()
+
+
+def _build_record_response(record: FixedCostRecord) -> dict:
+    """FixedCostRecord → dict (항목 정보 포함)"""
+    return {
+        "id": record.id,
+        "item_id": record.item_id,
+        "year": record.year,
+        "month": record.month,
+        "default_amount": record.default_amount,
+        "actual_amount": record.actual_amount,
+        "payment_date": record.payment_date,
+        "memo": record.memo,
+        "item_name": record.item.name if record.item else "",
+        "category": record.item.category if record.item else "",
+        "vendor_name": record.item.vendor_name if record.item else None,
+        "payment_day": record.item.payment_day if record.item else None,
+    }
+
+
+def get_fixed_cost_monthly(
+    db: Session, year: int, month: int
+) -> List[dict]:
+    """
+    월별 고정비 기록 조회.
+    레코드가 없으면 마스터 기준으로 자동 생성 후 반환.
+    """
+    _ensure_monthly_records(db, year, month)
+
+    records = (
+        db.query(FixedCostRecord)
+        .join(FixedCostItem, FixedCostRecord.item_id == FixedCostItem.id)
+        .filter(
+            FixedCostRecord.year == year,
+            FixedCostRecord.month == month,
+            FixedCostItem.is_active == 1,
+        )
+        .order_by(FixedCostItem.category.asc(), FixedCostItem.sort_order.asc())
+        .all()
+    )
+
+    return [_build_record_response(r) for r in records]
+
+
+def update_fixed_cost_record(
+    db: Session, record_id: int, data: FixedCostRecordUpdate
+) -> Optional[dict]:
+    """월별 고정비 실적 수정 (실제금액, 납부일, 메모)"""
+    record = db.query(FixedCostRecord).filter(FixedCostRecord.id == record_id).first()
+    if not record:
+        return None
+
+    if data.actual_amount is not None:
+        record.actual_amount = data.actual_amount
+    if data.payment_date is not None:
+        record.payment_date = data.payment_date
+    if data.memo is not None:
+        record.memo = data.memo
+
+    db.commit()
+    db.refresh(record)
+    return _build_record_response(record)
+
+
+def get_fixed_cost_summary(db: Session, year: int, month: int) -> dict:
+    """
+    월별 고정비 요약.
+    설정금액 합계 / 실제금액 합계 / 차이 + 카테고리별 소계 반환.
+    """
+    items = get_fixed_cost_monthly(db, year, month)
+
+    total_default = sum(i["default_amount"] for i in items)
+    total_actual  = sum(i["actual_amount"]  for i in items)
+    variance      = total_actual - total_default
+
+    # 카테고리별 소계
+    from collections import defaultdict
+    cat_map: dict = defaultdict(lambda: {"total_default": 0, "total_actual": 0})
+    for i in items:
+        cat_map[i["category"]]["total_default"] += i["default_amount"]
+        cat_map[i["category"]]["total_actual"]  += i["actual_amount"]
+
+    category_totals = [
+        {
+            "category": cat,
+            "total_default": v["total_default"],
+            "total_actual":  v["total_actual"],
+            "variance": v["total_actual"] - v["total_default"],
+        }
+        for cat, v in sorted(cat_map.items())
+    ]
+
+    return {
+        "year": year,
+        "month": month,
+        "total_default": total_default,
+        "total_actual": total_actual,
+        "variance": variance,
+        "category_totals": category_totals,
+        "items": items,
+    }
+
+
+def get_fixed_cost_actual_total(db: Session, year: int, month: int) -> int:
+    """
+    해당 월 고정비 실제지출 합계 반환.
+    손익계산 연동용.
+    """
+    from sqlalchemy import func as sqlfunc
+    result = (
+        db.query(sqlfunc.coalesce(sqlfunc.sum(FixedCostRecord.actual_amount), 0))
+        .join(FixedCostItem, FixedCostRecord.item_id == FixedCostItem.id)
+        .filter(
+            FixedCostRecord.year == year,
+            FixedCostRecord.month == month,
+            FixedCostItem.is_active == 1,
+        )
+        .scalar()
+    )
+    return int(result or 0)

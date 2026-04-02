@@ -265,3 +265,65 @@ class DailyIssue(Base):
 
     def __repr__(self):
         return f"<DailyIssue(id={self.id}, date={self.issue_date}, type={self.issue_type}, resolved={self.is_resolved})>"
+
+
+class FixedCostItem(Base):
+    """
+    고정비 항목 마스터 테이블.
+    매월 반복 지출되는 고정비 항목(임대료, 공과금 등)을 정의합니다.
+    """
+    __tablename__ = "fixed_cost_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 항목명
+    name = Column(String(100), nullable=False, comment="항목명 (임대료, 도시가스 등)")
+    # 카테고리: facility(시설비류) / operation(운영 월고정비)
+    category = Column(String(20), nullable=False, comment="카테고리 (facility/operation)")
+    # 업체명
+    vendor_name = Column(String(100), nullable=True, comment="업체명")
+    # 이체일 (매월 며칠에 납부)
+    payment_day = Column(Integer, nullable=True, comment="이체일 (1~31)")
+    # 기본 예산 (설정금액)
+    default_amount = Column(Integer, default=0, comment="설정금액 (기본 예산)")
+    # 사용 여부 (비활성화 시 0)
+    is_active = Column(Integer, default=1, comment="사용여부 (1: 사용, 0: 비활성)")
+    # 정렬 순서
+    sort_order = Column(Integer, default=0, comment="표시 순서")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+
+    # 월별 기록과의 관계
+    records = relationship("FixedCostRecord", back_populates="item")
+
+    def __repr__(self):
+        return f"<FixedCostItem(id={self.id}, name={self.name}, category={self.category})>"
+
+
+class FixedCostRecord(Base):
+    """
+    고정비 월별 실제 지출 기록 테이블.
+    항목별, 월별 설정금액 vs 실제금액을 기록합니다.
+    """
+    __tablename__ = "fixed_cost_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 고정비 항목 (외래키)
+    item_id = Column(Integer, ForeignKey("fixed_cost_items.id"), nullable=False, comment="고정비 항목 ID")
+    # 연도/월
+    year  = Column(Integer, nullable=False, comment="연도")
+    month = Column(Integer, nullable=False, comment="월")
+    # 해당 월 설정금액 (마스터에서 복사)
+    default_amount = Column(Integer, default=0, comment="설정금액 (마스터에서 복사)")
+    # 실제 지출금액
+    actual_amount = Column(Integer, default=0, comment="실제 지출금액")
+    # 실제 납부일
+    payment_date = Column(String(10), nullable=True, comment="납부일 (YYYY-MM-DD)")
+    # 메모
+    memo = Column(Text, nullable=True, comment="메모")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    # 항목과의 관계
+    item = relationship("FixedCostItem", back_populates="records")
+
+    def __repr__(self):
+        return f"<FixedCostRecord(id={self.id}, item_id={self.item_id}, {self.year}-{self.month:02d}, actual={self.actual_amount})>"

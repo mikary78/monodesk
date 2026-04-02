@@ -18,6 +18,8 @@ from schemas.operations import (
     VendorCreate, VendorUpdate, VendorResponse,
     DailyClosingCreate, DailyClosingResponse,
     DailyIssueCreate, DailyIssueUpdate, DailyIssueResponse,
+    FixedCostItemCreate, FixedCostItemUpdate, FixedCostItemResponse,
+    FixedCostRecordUpdate, FixedCostRecordResponse, FixedCostMonthlyResponse,
 )
 import services.operations_service as service
 
@@ -467,3 +469,84 @@ def delete_issue(issue_id: int, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="해당 이슈를 찾을 수 없습니다.")
     return {"success": True, "message": "이슈가 삭제되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 고정비 항목 마스터 API
+# ─────────────────────────────────────────
+
+@router.get("/fixed-costs/items", response_model=list[FixedCostItemResponse])
+def get_fixed_cost_items(db: Session = Depends(get_db)):
+    """고정비 항목 목록 조회 (카테고리→정렬순 기준)"""
+    return service.get_fixed_cost_items(db)
+
+
+@router.post("/fixed-costs/items", response_model=FixedCostItemResponse, status_code=201)
+def create_fixed_cost_item(data: FixedCostItemCreate, db: Session = Depends(get_db)):
+    """고정비 항목 추가"""
+    try:
+        return service.create_fixed_cost_item(db, data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"고정비 항목 저장 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.put("/fixed-costs/items/{item_id}", response_model=FixedCostItemResponse)
+def update_fixed_cost_item(item_id: int, data: FixedCostItemUpdate, db: Session = Depends(get_db)):
+    """고정비 항목 수정"""
+    result = service.update_fixed_cost_item(db, item_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 고정비 항목을 찾을 수 없습니다.")
+    return result
+
+
+@router.delete("/fixed-costs/items/{item_id}")
+def deactivate_fixed_cost_item(item_id: int, db: Session = Depends(get_db)):
+    """고정비 항목 비활성화 (실제 삭제 아님)"""
+    success = service.deactivate_fixed_cost_item(db, item_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 고정비 항목을 찾을 수 없습니다.")
+    return {"success": True, "message": "고정비 항목이 비활성화되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 고정비 월별 실적 API
+# 주의: 정적 경로(/summary, /record)를 동적 경로보다 먼저 등록
+# ─────────────────────────────────────────
+
+@router.get("/fixed-costs/summary/{year}/{month}", response_model=FixedCostMonthlyResponse)
+def get_fixed_cost_summary(
+    year: int, month: int, db: Session = Depends(get_db)
+):
+    """
+    월별 고정비 요약.
+    설정금액 합계 / 실제금액 합계 / 차이 + 카테고리별 소계.
+    """
+    try:
+        return service.get_fixed_cost_summary(db, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"고정비 요약 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.put("/fixed-costs/record/{record_id}", response_model=FixedCostRecordResponse)
+def update_fixed_cost_record(
+    record_id: int, data: FixedCostRecordUpdate, db: Session = Depends(get_db)
+):
+    """월별 고정비 실적 수정 (실제금액, 납부일, 메모)"""
+    result = service.update_fixed_cost_record(db, record_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 고정비 기록을 찾을 수 없습니다.")
+    return result
+
+
+@router.get("/fixed-costs/{year}/{month}", response_model=list[FixedCostRecordResponse])
+def get_fixed_cost_monthly(
+    year: int, month: int, db: Session = Depends(get_db)
+):
+    """
+    월별 고정비 기록 조회.
+    레코드 없으면 마스터 기준으로 자동 생성 후 반환.
+    """
+    try:
+        return service.get_fixed_cost_monthly(db, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"고정비 월별 조회 중 오류가 발생했습니다: {str(e)}")

@@ -15,6 +15,8 @@ import {
   Store,
   Wallet,
   AlertTriangle,
+  Settings,
+  BarChart2,
 } from "lucide-react";
 import NoticeBoard          from "../components/modules/operations/NoticeBoard";
 import HygieneCheck         from "../components/modules/operations/HygieneCheck";
@@ -23,16 +25,20 @@ import TaskChecklistPanel   from "../components/modules/operations/TaskChecklist
 import VendorTab            from "../components/modules/operations/VendorTab";
 import DailyClosingForm     from "../components/modules/operations/DailyClosingForm";
 import DailyIssueList       from "../components/modules/operations/DailyIssueList";
+import FixedCostSettings    from "../components/modules/operations/FixedCostSettings";
+import FixedCostMonthly     from "../components/modules/operations/FixedCostMonthly";
 
-// 7개 탭 정의 (일일마감 + 이슈관리 추가)
+// 9개 탭 정의 (고정비 설정 + 월별 고정비 추가)
 const TABS = [
-  { id: "notices",   label: "공지사항",       Icon: Bell          },
-  { id: "hygiene",   label: "위생 점검",       Icon: ShieldCheck   },
-  { id: "calendar",  label: "영업일 관리",      Icon: CalendarDays  },
-  { id: "tasks",     label: "업무 체크리스트",  Icon: CheckSquare   },
-  { id: "vendors",   label: "거래처 관리",      Icon: Store         },
-  { id: "closing",   label: "일일마감",         Icon: Wallet        },
-  { id: "issues",    label: "이슈관리",         Icon: AlertTriangle },
+  { id: "notices",       label: "공지사항",       Icon: Bell          },
+  { id: "hygiene",       label: "위생 점검",       Icon: ShieldCheck   },
+  { id: "calendar",      label: "영업일 관리",      Icon: CalendarDays  },
+  { id: "tasks",         label: "업무 체크리스트",  Icon: CheckSquare   },
+  { id: "vendors",       label: "거래처 관리",      Icon: Store         },
+  { id: "closing",       label: "일일마감",         Icon: Wallet        },
+  { id: "issues",        label: "이슈관리",         Icon: AlertTriangle },
+  { id: "fixed-setup",   label: "고정비 설정",      Icon: Settings      },
+  { id: "fixed-monthly", label: "월별 고정비",      Icon: BarChart2     },
 ];
 
 const OperationsPage = () => {
@@ -147,6 +153,16 @@ const OperationsPage = () => {
         {/* 이슈관리 탭 */}
         {activeTab === "issues" && (
           <DailyIssueList />
+        )}
+
+        {/* 고정비 설정 탭 */}
+        {activeTab === "fixed-setup" && (
+          <FixedCostSettings />
+        )}
+
+        {/* 월별 고정비 탭 */}
+        {activeTab === "fixed-monthly" && (
+          <FixedCostMonthly />
         )}
       </div>
     </div>

@@ -568,3 +568,110 @@ export const deleteIssue = async (id) => {
   }
   return res.json();
 };
+
+
+// ─────────────────────────────────────────
+// 고정비 항목 마스터 API
+// ─────────────────────────────────────────
+
+/**
+ * 고정비 항목 목록 조회 (활성 항목만)
+ */
+export const getFixedCostItems = async () => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/items`);
+  if (!res.ok) throw new Error("고정비 항목 조회에 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 고정비 항목 추가
+ * @param {object} data - { name, category, vendor_name, payment_day, default_amount, sort_order }
+ */
+export const createFixedCostItem = async (data) => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "고정비 항목 추가에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 고정비 항목 수정
+ * @param {number} id - 항목 ID
+ * @param {object} data - 수정할 필드
+ */
+export const updateFixedCostItem = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/items/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "고정비 항목 수정에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 고정비 항목 비활성화 (DELETE → is_active = 0)
+ * @param {number} id - 항목 ID
+ */
+export const deleteFixedCostItem = async (id) => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/items/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "고정비 항목 비활성화에 실패했습니다.");
+  }
+  return res.json();
+};
+
+
+// ─────────────────────────────────────────
+// 고정비 월별 실적 API
+// ─────────────────────────────────────────
+
+/**
+ * 월별 고정비 기록 조회 (없으면 마스터 기준 자동 생성)
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export const getFixedCostMonthly = async (year, month) => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/${year}/${month}`);
+  if (!res.ok) throw new Error("월별 고정비 조회에 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 고정비 실적 수정 (실제금액, 납부일, 메모)
+ * @param {number} id - 기록 ID
+ * @param {object} data - { actual_amount?, payment_date?, memo? }
+ */
+export const updateFixedCostRecord = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/record/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "고정비 실적 수정에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 월별 고정비 요약 조회 (설정금액 합계 / 실제금액 합계 / 차이 / 카테고리 소계)
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export const getFixedCostSummary = async (year, month) => {
+  const res = await fetch(`${BASE_URL}/fixed-costs/summary/${year}/${month}`);
+  if (!res.ok) throw new Error("고정비 요약 조회에 실패했습니다.");
+  return res.json();
+};

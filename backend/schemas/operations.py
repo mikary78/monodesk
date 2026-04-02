@@ -5,7 +5,7 @@
 
 from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 
 
 # ─────────────────────────────────────────
@@ -573,3 +573,122 @@ class DailyIssueResponse(BaseModel):
     is_resolved: int
     created_at: datetime
     updated_at: datetime
+
+
+# ─────────────────────────────────────────
+# 고정비 관리 스키마
+# ─────────────────────────────────────────
+
+class FixedCostItemCreate(BaseModel):
+    """고정비 항목 등록/수정 요청 스키마"""
+    name: str
+    category: str                       # facility / operation
+    vendor_name: Optional[str] = None
+    payment_day: Optional[int] = None   # 이체일 (1~31)
+    default_amount: int = 0             # 설정금액
+    sort_order: int = 0
+
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: str) -> str:
+        """카테고리 유효성 검사"""
+        allowed = {"facility", "operation"}
+        if v not in allowed:
+            raise ValueError(f"카테고리는 {allowed} 중 하나여야 합니다.")
+        return v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """항목명 공백 검사"""
+        if not v.strip():
+            raise ValueError("항목명을 입력해주세요.")
+        return v.strip()
+
+    @field_validator("payment_day")
+    @classmethod
+    def validate_payment_day(cls, v: Optional[int]) -> Optional[int]:
+        """이체일 범위 검사"""
+        if v is not None and not (1 <= v <= 31):
+            raise ValueError("이체일은 1~31 사이여야 합니다.")
+        return v
+
+
+class FixedCostItemUpdate(BaseModel):
+    """고정비 항목 수정 요청 스키마"""
+    name: Optional[str] = None
+    category: Optional[str] = None
+    vendor_name: Optional[str] = None
+    payment_day: Optional[int] = None
+    default_amount: Optional[int] = None
+    sort_order: Optional[int] = None
+
+
+class FixedCostItemResponse(BaseModel):
+    """고정비 항목 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    category: str
+    vendor_name: Optional[str]
+    payment_day: Optional[int]
+    default_amount: int
+    is_active: int
+    sort_order: int
+
+
+class FixedCostRecordCreate(BaseModel):
+    """월별 고정비 기록 생성 스키마"""
+    item_id: int
+    year: int
+    month: int
+    default_amount: int = 0
+    actual_amount: int = 0
+    payment_date: Optional[str] = None     # YYYY-MM-DD
+    memo: Optional[str] = None
+
+
+class FixedCostRecordUpdate(BaseModel):
+    """월별 고정비 실적 수정 스키마"""
+    actual_amount: Optional[int] = None    # 실제 지출금액
+    payment_date: Optional[str] = None     # 실제 납부일
+    memo: Optional[str] = None
+
+
+class FixedCostRecordResponse(BaseModel):
+    """월별 고정비 기록 응답 스키마"""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    item_id: int
+    year: int
+    month: int
+    default_amount: int
+    actual_amount: int
+    payment_date: Optional[str]
+    memo: Optional[str]
+    # 항목 정보 (조인 결과)
+    item_name: str = ""
+    category: str = ""
+    vendor_name: Optional[str] = None
+    payment_day: Optional[int] = None
+
+
+class FixedCostCategoryTotal(BaseModel):
+    """카테고리별 소계 스키마"""
+    category: str
+    total_default: int
+    total_actual: int
+    variance: int
+
+
+class FixedCostMonthlyResponse(BaseModel):
+    """월별 고정비 요약 응답 스키마"""
+    year: int
+    month: int
+    total_default: int                          # 설정금액 합계
+    total_actual: int                           # 실제금액 합계
+    variance: int                               # 차이 (actual - default, 양수=초과)
+    category_totals: List[FixedCostCategoryTotal]
+    items: List[FixedCostRecordResponse]

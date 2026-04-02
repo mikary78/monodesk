@@ -223,11 +223,15 @@ class ProfitLossResponse(BaseModel):
     cash_sales: float
     card_sales: float
     delivery_sales: float
-    # 지출 (카테고리별)
+    # 지출 (카테고리별 변동비)
     total_expense: float
     expense_by_category: List[dict]
+    # 고정비 (fixed_cost_records 실제금액 합계)
+    total_fixed_cost: float = 0.0
+    # 합산 총지출 = 변동비 + 고정비
+    total_combined_expense: float = 0.0
     # 손익
-    gross_profit: float          # 매출 - 총지출
+    gross_profit: float          # 매출 - 총지출(변동비+고정비)
     profit_margin: float         # 손익률 (%)
     cost_ratio: Optional[float] = None   # 원가율 = 식재료비 ÷ 매출 x 100 (%)
     # 전월 대비

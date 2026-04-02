@@ -300,8 +300,13 @@ def calculate_profit_loss(db: Session, year: int, month: int) -> ProfitLossRespo
     ]
     total_expense = sum(item["total"] for item in expense_categories)
 
-    # 손익 계산
-    gross_profit = total_sales - total_expense
+    # 고정비 실제지출 합계 (fixed_cost_records) 연동
+    from services.operations_service import get_fixed_cost_actual_total
+    total_fixed_cost = float(get_fixed_cost_actual_total(db, year, month))
+    total_combined_expense = total_expense + total_fixed_cost
+
+    # 손익 계산 (변동비 + 고정비 합산)
+    gross_profit = total_sales - total_combined_expense
     profit_margin = (gross_profit / total_sales * 100) if total_sales > 0 else 0
 
     # 전월 매출 조회 (증감률 계산용 — 동일하게 수동+POS 합산)
@@ -332,6 +337,8 @@ def calculate_profit_loss(db: Session, year: int, month: int) -> ProfitLossRespo
         delivery_sales=delivery_sales,
         total_expense=total_expense,
         expense_by_category=expense_categories,
+        total_fixed_cost=total_fixed_cost,
+        total_combined_expense=total_combined_expense,
         gross_profit=gross_profit,
         profit_margin=round(profit_margin, 1),
         cost_ratio=cost_ratio,
