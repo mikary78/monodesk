@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from database import create_tables
+from database import create_tables, run_migrations
 from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations, ocr, document
 
 # 프론트엔드 빌드 결과물 경로 (frontend/dist)
@@ -21,7 +21,10 @@ FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """앱 시작/종료 라이프스팬 이벤트"""
+    # 1. SQLAlchemy 모델 기반 테이블 생성 (없는 테이블 자동 생성)
     create_tables()
+    # 2. migrations/ 폴더의 SQL 파일 순서대로 실행 (이미 실행된 파일은 건너뜀)
+    run_migrations()
     print("MonoDesk 서버가 시작되었습니다.")
     print(f"브라우저에서 http://localhost:8000 으로 접속하세요.")
     yield

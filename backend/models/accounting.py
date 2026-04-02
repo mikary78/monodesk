@@ -3,7 +3,7 @@
 # 지출 분류, 지출 기록, 매출 기록 테이블을 정의합니다.
 # ============================================================
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean, func
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -94,6 +94,48 @@ class SalesRecord(Base):
     delivery_amount = Column(Float, default=0, comment="배달앱 매출 (원)")
     # 메모
     memo = Column(Text, nullable=True, comment="메모 (특이사항)")
+    # 현금영수증 금액 (원)
+    cash_receipt_amount = Column(Float, default=0, comment="현금영수증 금액 (원)")
+    # 할인액 (원)
+    discount_amount = Column(Float, default=0, comment="할인액 (원)")
+    # 서비스액 (원)
+    service_amount = Column(Float, default=0, comment="서비스액 (원)")
+    # 영수건수 (영수증 발행 건수)
+    receipt_count = Column(Integer, default=0, comment="영수건수")
+    # 방문 고객 수
+    customer_count = Column(Integer, default=0, comment="고객수")
+    # 계좌이체 건수
+    transfer_count = Column(Integer, default=0, comment="계좌이체 건수")
+    # 계좌이체 금액 (원)
+    transfer_amount = Column(Float, default=0, comment="계좌이체 금액 (원)")
+    # 캐치테이블 영수건수
+    catchtable_count = Column(Integer, default=0, comment="캐치테이블 영수건수")
+    # 캐치테이블 이체금액 (원)
+    catchtable_amount = Column(Float, default=0, comment="캐치테이블 이체금액 (원)")
+    # 카드취소 건수
+    card_cancel_count = Column(Integer, default=0, comment="카드취소 건수")
+    # 카드취소 금액 (원)
+    card_cancel_amount = Column(Float, default=0, comment="카드취소 금액 (원)")
+    # 카드취소 사유
+    card_cancel_reason = Column(Text, nullable=True, comment="카드취소 사유")
+    # 카드수수료 예상 (원, 카드매출 × 1.92%)
+    card_fee_estimated = Column(Float, default=0, comment="카드수수료 예상 (원)")
+    # 배달수수료 예상 (원, 배달매출 × 21.3%)
+    delivery_fee_estimated = Column(Float, default=0, comment="배달수수료 예상 (원)")
+    # 품목별 매출: 메뉴 (원)
+    sales_menu = Column(Float, default=0, comment="메뉴 매출 (원)")
+    # 품목별 매출: 기타메뉴 (원)
+    sales_other_menu = Column(Float, default=0, comment="기타메뉴 매출 (원)")
+    # 품목별 매출: 포장 (원)
+    sales_takeout = Column(Float, default=0, comment="포장 매출 (원)")
+    # 품목별 매출: 주류 (원)
+    sales_liquor = Column(Float, default=0, comment="주류 매출 (원)")
+    # 품목별 매출: 기타주류 (원)
+    sales_other_liquor = Column(Float, default=0, comment="기타주류 매출 (원)")
+    # 품목별 매출: 기타 (원)
+    sales_etc = Column(Float, default=0, comment="기타 매출 (원)")
+    # 특이사항 메모
+    special_note = Column(Text, nullable=True, comment="특이사항")
     # POS 연동 여부 (True: POS 자동 연동, False: 수동 입력)
     is_pos_synced = Column(Integer, default=0, comment="POS 연동 여부 (0: 수동, 1: 자동)")
     # 소프트 삭제
@@ -103,8 +145,20 @@ class SalesRecord(Base):
 
     @property
     def total_sales(self) -> float:
-        """총 매출 계산 (현금 + 카드 + 배달)"""
-        return (self.cash_amount or 0) + (self.card_amount or 0) + (self.delivery_amount or 0)
+        """
+        순매출 계산.
+        카드 + 현금 + 현금영수증 + 배달 + 계좌이체 + 캐치테이블 - 할인 - 서비스
+        """
+        return (
+            (self.cash_amount or 0)
+            + (self.card_amount or 0)
+            + (self.delivery_amount or 0)
+            + (self.cash_receipt_amount or 0)
+            + (self.transfer_amount or 0)
+            + (self.catchtable_amount or 0)
+            - (self.discount_amount or 0)
+            - (self.service_amount or 0)
+        )
 
     def __repr__(self):
         return f"<SalesRecord(id={self.id}, date={self.sales_date}, total={self.total_sales})>"
