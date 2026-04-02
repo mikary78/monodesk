@@ -433,3 +433,138 @@ export const deleteVendor = async (vendorId) => {
   }
   return res.json();
 };
+
+
+// ─────────────────────────────────────────
+// 현금 시재 API
+// ─────────────────────────────────────────
+
+/**
+ * 특정 날짜 시재 조회 (없으면 전일 잔액 포함 빈 데이터 반환)
+ * @param {string} date - YYYY-MM-DD
+ */
+export const getClosingByDate = async (date) => {
+  const res = await fetch(`${BASE_URL}/closing/${date}`);
+  if (!res.ok) throw new Error("시재 조회에 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 현금 시재 저장 (upsert — 날짜 기준)
+ * @param {object} data - DailyClosingCreate 필드
+ */
+export const saveClosing = async (data) => {
+  const res = await fetch(`${BASE_URL}/closing`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "시재 저장에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 현금 시재 수정 (ID 기준)
+ * @param {number} id - 시재 ID
+ * @param {object} data - DailyClosingCreate 필드
+ */
+export const updateClosing = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/closing/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "시재 수정에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 월별 시재 목록 조회
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export const getClosingList = async (year, month) => {
+  const res = await fetch(`${BASE_URL}/closing/list?year=${year}&month=${month}`);
+  if (!res.ok) throw new Error("시재 목록 조회에 실패했습니다.");
+  return res.json();
+};
+
+
+// ─────────────────────────────────────────
+// 이슈 트래킹 API
+// ─────────────────────────────────────────
+
+/**
+ * 특정 날짜 이슈 목록 조회
+ * @param {string} date - YYYY-MM-DD
+ */
+export const getIssuesByDate = async (date) => {
+  const res = await fetch(`${BASE_URL}/issues?date=${date}`);
+  if (!res.ok) throw new Error("이슈 목록 조회에 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 월별 이슈 목록 조회
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export const getIssuesList = async (year, month) => {
+  const res = await fetch(`${BASE_URL}/issues/list?year=${year}&month=${month}`);
+  if (!res.ok) throw new Error("이슈 월별 목록 조회에 실패했습니다.");
+  return res.json();
+};
+
+/**
+ * 이슈 등록
+ * @param {object} data - { issue_date, issue_type, content, action_taken, is_resolved }
+ */
+export const createIssue = async (data) => {
+  const res = await fetch(`${BASE_URL}/issues`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "이슈 등록에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 이슈 수정 (처리내역 추가, 완료 처리 등)
+ * @param {number} id - 이슈 ID
+ * @param {object} data - { issue_type?, content?, action_taken?, is_resolved? }
+ */
+export const updateIssue = async (id, data) => {
+  const res = await fetch(`${BASE_URL}/issues/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "이슈 수정에 실패했습니다.");
+  }
+  return res.json();
+};
+
+/**
+ * 이슈 삭제
+ * @param {number} id - 이슈 ID
+ */
+export const deleteIssue = async (id) => {
+  const res = await fetch(`${BASE_URL}/issues/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "이슈 삭제에 실패했습니다.");
+  }
+  return res.json();
+};

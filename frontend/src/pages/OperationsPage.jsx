@@ -13,20 +13,26 @@ import {
   ChevronLeft,
   ChevronRight,
   Store,
+  Wallet,
+  AlertTriangle,
 } from "lucide-react";
 import NoticeBoard          from "../components/modules/operations/NoticeBoard";
 import HygieneCheck         from "../components/modules/operations/HygieneCheck";
 import BusinessCalendar     from "../components/modules/operations/BusinessCalendar";
 import TaskChecklistPanel   from "../components/modules/operations/TaskChecklistPanel";
 import VendorTab            from "../components/modules/operations/VendorTab";
+import DailyClosingForm     from "../components/modules/operations/DailyClosingForm";
+import DailyIssueList       from "../components/modules/operations/DailyIssueList";
 
-// 5개 탭 정의 (거래처 관리 추가)
+// 7개 탭 정의 (일일마감 + 이슈관리 추가)
 const TABS = [
-  { id: "notices",   label: "공지사항",       Icon: Bell         },
-  { id: "hygiene",   label: "위생 점검",       Icon: ShieldCheck  },
-  { id: "calendar",  label: "영업일 관리",      Icon: CalendarDays },
-  { id: "tasks",     label: "업무 체크리스트",  Icon: CheckSquare  },
-  { id: "vendors",   label: "거래처 관리",      Icon: Store        },
+  { id: "notices",   label: "공지사항",       Icon: Bell          },
+  { id: "hygiene",   label: "위생 점검",       Icon: ShieldCheck   },
+  { id: "calendar",  label: "영업일 관리",      Icon: CalendarDays  },
+  { id: "tasks",     label: "업무 체크리스트",  Icon: CheckSquare   },
+  { id: "vendors",   label: "거래처 관리",      Icon: Store         },
+  { id: "closing",   label: "일일마감",         Icon: Wallet        },
+  { id: "issues",    label: "이슈관리",         Icon: AlertTriangle },
 ];
 
 const OperationsPage = () => {
@@ -131,6 +137,16 @@ const OperationsPage = () => {
         {/* 거래처 관리 탭 */}
         {activeTab === "vendors" && (
           <VendorTab />
+        )}
+
+        {/* 일일마감 탭 */}
+        {activeTab === "closing" && (
+          <DailyClosingForm />
+        )}
+
+        {/* 이슈관리 탭 */}
+        {activeTab === "issues" && (
+          <DailyIssueList />
         )}
       </div>
     </div>
