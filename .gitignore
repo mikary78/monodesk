@@ -1,0 +1,54 @@
+# ============================================================
+# MonoDesk .gitignore
+# 실제 운영 데이터, 민감 정보, 빌드 산출물 제외
+# ============================================================
+
+# ── 실제 데이터 (절대 업로드 금지) ──
+/database/*.db
+/database/chromadb/
+
+# ── 업로드 파일 (영수증, 문서, 음성) ──
+/uploads/
+
+# ── 백업 파일 ──
+/backup/
+
+# ── 환경 변수 (민감 설정값) ──
+.env
+.env.local
+.env.production
+
+# ── Python 캐시 및 가상환경 ──
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+*.egg-info/
+
+# ── Node.js ──
+node_modules/
+dist/
+build/
+.next/
+
+# ── AI 모델 파일 (용량 큼) ──
+*.bin
+*.gguf
+*.safetensors
+models/
+
+# ── OS 시스템 파일 ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE 설정 ──
+.vscode/settings.json
+.idea/
+*.swp
+
+# ── 로그 파일 ──
+*.log
+logs/
