@@ -28,6 +28,16 @@ class EmployeeBase(BaseModel):
     bank_account: Optional[str] = None
     bank_name: Optional[str] = None
     contract_file_path: Optional[str] = None
+    # 근무파트 (hall: 홀 / kitchen: 주방 / management: 관리)
+    work_part: Optional[str] = "hall"
+    # 식대 비과세 (기본 200,000원)
+    meal_allowance: int = 200000
+    # 차량유지비 비과세
+    car_allowance: int = 0
+    # 근무조건 텍스트 (예: 주5일 17:00~24:00)
+    work_condition: Optional[str] = None
+    # 계약형태: 4대보험 / 3.3% / 시급알바
+    contract_type: Optional[str] = "4대보험"
     memo: Optional[str] = None
 
     @field_validator("employment_type")
@@ -77,6 +87,16 @@ class EmployeeUpdate(BaseModel):
     bank_account: Optional[str] = None
     bank_name: Optional[str] = None
     contract_file_path: Optional[str] = None
+    # 근무파트 (hall: 홀 / kitchen: 주방 / management: 관리)
+    work_part: Optional[str] = None
+    # 식대 비과세
+    meal_allowance: Optional[int] = None
+    # 차량유지비 비과세
+    car_allowance: Optional[int] = None
+    # 근무조건 텍스트
+    work_condition: Optional[str] = None
+    # 계약형태: 4대보험 / 3.3% / 시급알바
+    contract_type: Optional[str] = None
     memo: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

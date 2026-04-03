@@ -12,7 +12,8 @@ import {
 import {
   fetchEmployees, deleteEmployee, uploadContract,
   downloadContract, deleteContract,
-  formatEmploymentType, formatSalaryType, formatCurrency, formatDate
+  formatEmploymentType, formatSalaryType, formatCurrency, formatDate,
+  formatContractType
 } from "../../../api/employeeApi";
 import EmployeeFormModal from "./EmployeeFormModal";
 import { useToast } from "../../../contexts/ToastContext";
@@ -158,11 +159,44 @@ const EmployeeList = () => {
     );
   });
 
-  // 고용 형태별 배지 스타일
-  const getEmploymentBadgeStyle = (type) =>
-    type === "FULL_TIME"
-      ? "bg-blue-100 text-blue-700"
-      : "bg-amber-100 text-amber-700";
+  // 계약형태별 배지 스타일
+  const getContractBadgeStyle = (contractType) => {
+    if (contractType === "4대보험") return "bg-blue-100 text-blue-700";
+    if (contractType === "3.3%") return "bg-purple-100 text-purple-700";
+    return "bg-amber-100 text-amber-700"; // 시급알바 또는 미분류
+  };
+
+  // 근무파트 한국어 변환
+  const formatWorkPart = (part) => {
+    const map = { hall: "홀", kitchen: "주방", management: "관리" };
+    return map[part] || part;
+  };
+
+  // 계약형태별 섹션 정의
+  const sections = [
+    {
+      key: "4대보험",
+      label: "정직원",
+      employees: filteredEmployees.filter(
+        (e) => e.contract_type === "4대보험" || (!e.contract_type && e.employment_type === "FULL_TIME")
+      ),
+      badgeColor: "bg-blue-100 text-blue-700",
+    },
+    {
+      key: "3.3%",
+      label: "계약직 (3.3%)",
+      employees: filteredEmployees.filter((e) => e.contract_type === "3.3%"),
+      badgeColor: "bg-purple-100 text-purple-700",
+    },
+    {
+      key: "시급알바",
+      label: "아르바이트",
+      employees: filteredEmployees.filter(
+        (e) => e.contract_type === "시급알바" || (!e.contract_type && e.employment_type === "PART_TIME")
+      ),
+      badgeColor: "bg-amber-100 text-amber-700",
+    },
+  ];
 
   if (loading) {
     return (
@@ -259,143 +293,177 @@ const EmployeeList = () => {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
-          {filteredEmployees.map((emp) => (
-            <div
-              key={emp.id}
-              className={`bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow ${
-                emp.resign_date ? "opacity-60" : ""
-              }`}
-            >
-              {/* 메인 정보 행 */}
-              <div className="flex items-center justify-between p-5">
-                {/* 아바타 + 이름 영역 */}
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <User size={20} className="text-slate-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 text-base">{emp.name}</span>
-                      {emp.resign_date && (
-                        <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded font-medium">
-                          퇴사
-                        </span>
-                      )}
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${getEmploymentBadgeStyle(emp.employment_type)}`}>
-                        {formatEmploymentType(emp.employment_type)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
-                      {emp.position && (
-                        <span className="flex items-center gap-1">
-                          <Briefcase size={12} />
-                          {emp.position}
-                        </span>
-                      )}
-                      {emp.phone && (
-                        <span className="flex items-center gap-1">
-                          <Phone size={12} />
-                          {emp.phone}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+        /* 계약형태별 섹션 렌더링 */
+        <div>
+          {sections.map((section) =>
+            section.employees.length > 0 ? (
+              <div key={section.key} className="mb-6">
+                {/* 섹션 헤더 */}
+                <div className="flex items-center gap-2 mb-3">
+                  <h3 className="text-sm font-semibold text-slate-700">{section.label}</h3>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${section.badgeColor}`}>
+                    {section.employees.length}명
+                  </span>
                 </div>
 
-                {/* 우측 정보 + 버튼 영역 */}
-                <div className="flex items-center gap-4">
-                  {/* 급여 정보 */}
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-slate-900">
-                      {emp.salary_type === "HOURLY"
-                        ? `${formatCurrency(emp.hourly_wage)} / 시`
-                        : formatCurrency(emp.monthly_salary)}
+                <div className="space-y-3">
+                  {section.employees.map((emp) => (
+                    <div
+                      key={emp.id}
+                      className={`bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow ${
+                        emp.resign_date ? "opacity-60" : ""
+                      }`}
+                    >
+                      {/* 메인 정보 행 */}
+                      <div className="flex items-center justify-between p-5">
+                        {/* 아바타 + 이름 영역 */}
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <User size={20} className="text-slate-400" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900 text-base">{emp.name}</span>
+                              {emp.resign_date && (
+                                <span className="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded font-medium">
+                                  퇴사
+                                </span>
+                              )}
+                              {/* 계약형태 배지 (기존 employment_type 배지 대체) */}
+                              <span className={`text-xs px-2 py-0.5 rounded font-medium ${getContractBadgeStyle(emp.contract_type)}`}>
+                                {formatContractType(emp.contract_type) || formatEmploymentType(emp.employment_type)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                              {emp.position && (
+                                <span className="flex items-center gap-1">
+                                  <Briefcase size={12} />
+                                  {emp.position}
+                                </span>
+                              )}
+                              {/* 근무파트 표시 */}
+                              {emp.work_part && (
+                                <span className="text-xs text-slate-400">
+                                  [{formatWorkPart(emp.work_part)}]
+                                </span>
+                              )}
+                              {emp.phone && (
+                                <span className="flex items-center gap-1">
+                                  <Phone size={12} />
+                                  {emp.phone}
+                                </span>
+                              )}
+                              {/* 근무조건 표시 */}
+                              {emp.work_condition && (
+                                <span className="text-xs text-slate-400">{emp.work_condition}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 우측 정보 + 버튼 영역 */}
+                        <div className="flex items-center gap-4">
+                          {/* 급여 정보 */}
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-slate-900">
+                              {emp.salary_type === "HOURLY"
+                                ? `${formatCurrency(emp.hourly_wage)} / 시`
+                                : formatCurrency(emp.monthly_salary)}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5">
+                              {formatSalaryType(emp.salary_type)}
+                              {/* 3.3% 계약직 안내 */}
+                              {emp.contract_type === "3.3%" && (
+                                <span className="ml-1">(3.3% 원천징수)</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 4대보험 아이콘 */}
+                          <div className="flex flex-col items-center">
+                            {emp.has_insurance ? (
+                              <ShieldCheck size={20} className="text-green-500" title="4대보험 적용" />
+                            ) : (
+                              <ShieldOff size={20} className="text-slate-300" title="4대보험 미적용" />
+                            )}
+                            <span className="text-xs text-slate-400 mt-0.5">
+                              {emp.has_insurance ? "4대보험" : "미적용"}
+                            </span>
+                          </div>
+
+                          {/* 입사일 */}
+                          <div className="text-right">
+                            <div className="text-xs text-slate-400">입사</div>
+                            <div className="text-sm font-medium text-slate-600">{formatDate(emp.hire_date) || "-"}</div>
+                          </div>
+
+                          {/* 근로계약서 버튼 */}
+                          <div className="flex items-center gap-1">
+                            {emp.contract_file_path ? (
+                              <>
+                                {/* 다운로드 버튼 */}
+                                <button
+                                  onClick={() => downloadContract(emp.id)}
+                                  className="h-8 px-2 flex items-center gap-1 border border-green-200 text-green-600 text-xs rounded hover:bg-green-50 transition-colors"
+                                  title="근로계약서 다운로드"
+                                >
+                                  <Download size={13} />
+                                  계약서
+                                </button>
+                                {/* 계약서 삭제 버튼 */}
+                                <button
+                                  onClick={() => handleContractDeleteClick(emp)}
+                                  className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-red-50 transition-colors"
+                                  title="계약서 삭제"
+                                >
+                                  <Trash size={13} className="text-slate-400 hover:text-red-400" />
+                                </button>
+                              </>
+                            ) : (
+                              /* 업로드 버튼 */
+                              <button
+                                onClick={() => handleContractUploadClick(emp.id)}
+                                disabled={uploadingMap[emp.id]}
+                                className="h-8 px-2 flex items-center gap-1 border border-slate-200 text-slate-500 text-xs rounded hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                                title="근로계약서 업로드 (PDF/이미지)"
+                              >
+                                {uploadingMap[emp.id] ? (
+                                  <span>업로드 중...</span>
+                                ) : (
+                                  <>
+                                    <Upload size={13} />
+                                    계약서
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* 수정 / 삭제 버튼 */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => { setEditingEmployee(emp); setShowModal(true); }}
+                              className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                              title="직원 정보 수정"
+                            >
+                              <Edit size={14} className="text-slate-500" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(emp)}
+                              className="h-8 w-8 flex items-center justify-center border border-red-200 rounded hover:bg-red-50 transition-colors"
+                              title="직원 삭제"
+                            >
+                              <Trash2 size={14} className="text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-400 mt-0.5">{formatSalaryType(emp.salary_type)}</div>
-                  </div>
-
-                  {/* 4대보험 아이콘 */}
-                  <div className="flex flex-col items-center">
-                    {emp.has_insurance ? (
-                      <ShieldCheck size={20} className="text-green-500" title="4대보험 적용" />
-                    ) : (
-                      <ShieldOff size={20} className="text-slate-300" title="4대보험 미적용" />
-                    )}
-                    <span className="text-xs text-slate-400 mt-0.5">
-                      {emp.has_insurance ? "4대보험" : "미적용"}
-                    </span>
-                  </div>
-
-                  {/* 입사일 */}
-                  <div className="text-right">
-                    <div className="text-xs text-slate-400">입사</div>
-                    <div className="text-sm font-medium text-slate-600">{formatDate(emp.hire_date) || "-"}</div>
-                  </div>
-
-                  {/* 근로계약서 버튼 */}
-                  <div className="flex items-center gap-1">
-                    {emp.contract_file_path ? (
-                      <>
-                        {/* 다운로드 버튼 */}
-                        <button
-                          onClick={() => downloadContract(emp.id)}
-                          className="h-8 px-2 flex items-center gap-1 border border-green-200 text-green-600 text-xs rounded hover:bg-green-50 transition-colors"
-                          title="근로계약서 다운로드"
-                        >
-                          <Download size={13} />
-                          계약서
-                        </button>
-                        {/* 계약서 삭제 버튼 */}
-                        <button
-                          onClick={() => handleContractDeleteClick(emp)}
-                          className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-red-50 transition-colors"
-                          title="계약서 삭제"
-                        >
-                          <Trash size={13} className="text-slate-400 hover:text-red-400" />
-                        </button>
-                      </>
-                    ) : (
-                      /* 업로드 버튼 */
-                      <button
-                        onClick={() => handleContractUploadClick(emp.id)}
-                        disabled={uploadingMap[emp.id]}
-                        className="h-8 px-2 flex items-center gap-1 border border-slate-200 text-slate-500 text-xs rounded hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                        title="근로계약서 업로드 (PDF/이미지)"
-                      >
-                        {uploadingMap[emp.id] ? (
-                          <span>업로드 중...</span>
-                        ) : (
-                          <>
-                            <Upload size={13} />
-                            계약서
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 수정 / 삭제 버튼 */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => { setEditingEmployee(emp); setShowModal(true); }}
-                      className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-slate-50 transition-colors"
-                      title="직원 정보 수정"
-                    >
-                      <Edit size={14} className="text-slate-500" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteClick(emp)}
-                      className="h-8 w-8 flex items-center justify-center border border-red-200 rounded hover:bg-red-50 transition-colors"
-                      title="직원 삭제"
-                    >
-                      <Trash2 size={14} className="text-red-400" />
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
-            </div>
-          ))}
+            ) : null
+          )}
         </div>
       )}
 

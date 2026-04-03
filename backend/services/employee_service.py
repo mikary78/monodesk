@@ -485,12 +485,41 @@ def calculate_salary(
         effective_hourly = hourly_wage_monthly
         minimum_wage_ok = effective_hourly >= MINIMUM_WAGE_PER_HOUR
 
-    # 4대보험 공제 (적용 대상만)
-    deductions = {"deduction_pension": 0.0, "deduction_health": 0.0,
-                  "deduction_care": 0.0, "deduction_employment": 0.0,
-                  "total_deduction": 0.0}
-    if employee.has_insurance:
-        deductions = _calculate_insurance_deductions(gross_pay)
+    # 계약형태에 따른 공제 분기
+    # contract_type이 없는 기존 데이터는 has_insurance로 fallback 처리
+    ct = getattr(employee, "contract_type", None) or (
+        "4대보험" if employee.has_insurance else "시급알바"
+    )
+
+    if ct == "4대보험":
+        # 과세급여 = 총급여 - 식대(비과세) - 차량유지비(비과세)
+        # 4대보험은 과세급여 기준으로 계산 (소득세법 제12조)
+        meal = getattr(employee, "meal_allowance", None) or 0
+        car = getattr(employee, "car_allowance", None) or 0
+        taxable_pay = max(0.0, gross_pay - meal - car)
+        deductions = _calculate_insurance_deductions(taxable_pay)
+
+    elif ct == "3.3%":
+        # 3.3% 원천징수: 소득세 3% + 지방소득세 0.3% (소득세법 제129조)
+        withholding_tax = round(gross_pay * 0.033, 0)
+        deductions = {
+            "deduction_pension": 0.0,
+            "deduction_health": 0.0,
+            "deduction_care": 0.0,
+            # deduction_employment 컬럼에 3.3% 원천징수액 저장
+            "deduction_employment": withholding_tax,
+            "total_deduction": withholding_tax,
+        }
+
+    else:
+        # 시급알바: 공제 없음
+        deductions = {
+            "deduction_pension": 0.0,
+            "deduction_health": 0.0,
+            "deduction_care": 0.0,
+            "deduction_employment": 0.0,
+            "total_deduction": 0.0,
+        }
 
     net_pay = round(gross_pay - deductions["total_deduction"], 0)
 

@@ -29,6 +29,20 @@ const BANK_OPTIONS = [
   "카카오뱅크", "토스뱅크", "케이뱅크", "기업은행", "새마을금고", "기타"
 ];
 
+// 근무파트 옵션
+const WORK_PART_OPTIONS = [
+  { value: "hall", label: "홀" },
+  { value: "kitchen", label: "주방" },
+  { value: "management", label: "관리" },
+];
+
+// 계약형태 옵션
+const CONTRACT_TYPE_OPTIONS = [
+  { value: "4대보험", label: "4대보험" },
+  { value: "3.3%", label: "3.3% 계약직" },
+  { value: "시급알바", label: "시급알바" },
+];
+
 /**
  * 직원 등록/수정 모달 컴포넌트
  * @param {object|null} employee - 수정 시 직원 데이터, null이면 신규 등록
@@ -63,6 +77,12 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
     position: "",
     bank_account: "",
     bank_name: "",
+    // 상세 정보 신규 필드
+    work_part: "hall",
+    meal_allowance: 200000,
+    car_allowance: 0,
+    work_condition: "",
+    contract_type: "4대보험",
     memo: "",
   });
 
@@ -87,6 +107,12 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
         position: employee.position || "",
         bank_account: employee.bank_account || "",
         bank_name: employee.bank_name || "",
+        // 상세 정보 신규 필드 — 기존 데이터 없는 경우 기본값으로 fallback
+        work_part: employee.work_part || "hall",
+        meal_allowance: employee.meal_allowance ?? 200000,
+        car_allowance: employee.car_allowance ?? 0,
+        work_condition: employee.work_condition || "",
+        contract_type: employee.contract_type || "4대보험",
         memo: employee.memo || "",
       });
     }
@@ -153,6 +179,14 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
       bank_account: form.bank_account || null,
       bank_name: form.bank_name || null,
       memo: form.memo || null,
+      // 상세 정보 신규 필드
+      work_part: form.work_part || "hall",
+      meal_allowance: Number(form.meal_allowance) || 200000,
+      car_allowance: Number(form.car_allowance) || 0,
+      work_condition: form.work_condition || null,
+      contract_type: form.contract_type || "4대보험",
+      // contract_type에 따라 has_insurance 자동 설정
+      has_insurance: form.contract_type === "4대보험",
     };
 
     try {
@@ -264,6 +298,104 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* 근무파트 */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">근무파트</label>
+            <div className="flex gap-2">
+              {WORK_PART_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, work_part: opt.value }))}
+                  className={
+                    form.work_part === opt.value
+                      ? "h-9 px-4 text-sm font-medium bg-blue-500 text-white rounded-md transition-colors"
+                      : "h-9 px-4 text-sm font-medium border border-slate-200 rounded-md hover:bg-slate-50 transition-colors"
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 계약형태 */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">계약형태</label>
+            <div className="flex gap-2">
+              {CONTRACT_TYPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, contract_type: opt.value }))}
+                  className={
+                    form.contract_type === opt.value
+                      ? "h-9 px-4 text-sm font-medium bg-blue-500 text-white rounded-md transition-colors"
+                      : "h-9 px-4 text-sm font-medium border border-slate-200 rounded-md hover:bg-slate-50 transition-colors"
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 계약형태별 조건부 필드 */}
+          {form.contract_type === "4대보험" && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  식대 <span className="text-slate-400 font-normal">(비과세)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    name="meal_allowance"
+                    value={form.meal_allowance}
+                    onChange={handleChange}
+                    className="w-full h-9 px-3 pr-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  차량유지비 <span className="text-slate-400 font-normal">(비과세)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    name="car_allowance"
+                    value={form.car_allowance}
+                    onChange={handleChange}
+                    className="w-full h-9 px-3 pr-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3.3% 선택 시 안내 메시지 */}
+          {form.contract_type === "3.3%" && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-700">
+              3.3% 원천징수 (소득세 3% + 지방소득세 0.3%)가 자동 적용됩니다.
+            </div>
+          )}
+
+          {/* 근무조건 */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">근무조건</label>
+            <input
+              type="text"
+              name="work_condition"
+              value={form.work_condition}
+              onChange={handleChange}
+              placeholder="예: 주5일 17:00~24:00"
+              className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
 
           {/* 급여 유형 + 금액 */}

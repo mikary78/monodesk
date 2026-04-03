@@ -316,3 +316,14 @@ export function formatDate(dateStr) {
   if (!dateStr) return "-";
   return dateStr.replace(/-/g, ".");
 }
+
+/**
+ * 계약형태 코드를 축약 한국어 레이블로 변환합니다.
+ * 목록 뷰의 배지 표시에 사용됩니다.
+ * @param {string} type - 계약형태 코드 (4대보험 / 3.3% / 시급알바)
+ * @returns {string} 변환된 레이블
+ */
+export function formatContractType(type) {
+  const map = { "4대보험": "정규직", "3.3%": "계약직", "시급알바": "알바" };
+  return map[type] || type;
+}

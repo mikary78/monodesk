@@ -6,7 +6,22 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from enum import Enum
 from database import Base
+
+
+class WorkPart(str, Enum):
+    """근무파트 구분"""
+    HALL = "hall"               # 홀
+    KITCHEN = "kitchen"         # 주방
+    MANAGEMENT = "management"   # 관리
+
+
+class ContractType(str, Enum):
+    """계약형태 구분"""
+    INSURANCE = "4대보험"   # 4대보험 (정규직/월급)
+    TAX_3_3 = "3.3%"       # 3.3% 원천징수 (계약직)
+    HOURLY = "시급알바"     # 시급제 알바
 
 
 class Employee(Base):
@@ -56,6 +71,21 @@ class Employee(Base):
 
     # 근로계약서 파일 경로 (로컬 저장)
     contract_file_path = Column(String(500), nullable=True, comment="근로계약서 파일 경로")
+
+    # 근무파트 (hall: 홀 / kitchen: 주방 / management: 관리)
+    work_part = Column(String(20), default="hall", comment="근무파트")
+
+    # 식대 비과세 (기본 200,000원 — 소득세법 제12조)
+    meal_allowance = Column(Integer, default=200000, comment="식대 비과세 (원)")
+
+    # 차량유지비 비과세 (소득세법 제12조)
+    car_allowance = Column(Integer, default=0, comment="차량유지비 비과세 (원)")
+
+    # 근무조건 텍스트 (예: 주5일 17:00~24:00)
+    work_condition = Column(String(100), nullable=True, comment="근무조건 (예: 주5일 17:00~24:00)")
+
+    # 계약형태: 4대보험 / 3.3% / 시급알바
+    contract_type = Column(String(10), default="4대보험", comment="계약형태 (4대보험/3.3%/시급알바)")
 
     # 메모
     memo = Column(Text, nullable=True, comment="비고/메모")
