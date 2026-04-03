@@ -198,6 +198,36 @@ def calculate_hours(
         raise HTTPException(status_code=400, detail=f"시간 계산 중 오류가 발생했습니다: {str(e)}")
 
 
+@router.get("/attendance/monthly-calendar")
+def get_monthly_attendance_calendar(
+    year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
+    month: int = Query(..., ge=1, le=12, description="조회 월"),
+    db: Session = Depends(get_db)
+):
+    """
+    해당 월 전체 직원 근태 달력 데이터 반환.
+    {직원id: {날짜: {status, clock_in, clock_out, work_hours}}} 형태로 반환합니다.
+    주의: 고정 경로이므로 /attendance/{attendance_id} 앞에 등록합니다.
+    """
+    return service.get_monthly_calendar(db, year, month)
+
+
+@router.patch("/attendance/{attendance_id}/status")
+def update_attendance_status(
+    attendance_id: int,
+    status: str = Query(..., description="변경할 근무 상태값"),
+    db: Session = Depends(get_db)
+):
+    """
+    daily_status만 수정하는 전용 엔드포인트.
+    근무표 달력에서 셀 클릭 시 상태 변경에 사용합니다.
+    """
+    result = service.update_attendance_status(db, attendance_id, status)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 출퇴근 기록을 찾을 수 없습니다.")
+    return result
+
+
 @router.post("/attendance", response_model=AttendanceRecordResponse, status_code=201)
 def create_attendance(data: AttendanceRecordCreate, db: Session = Depends(get_db)):
     """

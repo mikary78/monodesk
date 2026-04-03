@@ -259,6 +259,34 @@ export async function fetchSalaryHistory(employeeId) {
 }
 
 // ─────────────────────────────────────────
+// 근무표 달력 API
+// ─────────────────────────────────────────
+
+/**
+ * 월별 전체 직원 근태 달력 데이터 조회.
+ * 엔드포인트: GET /attendance/monthly-calendar?year=&month=
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export async function getMonthlyAttendanceCalendar(year, month) {
+  const params = new URLSearchParams({ year, month });
+  return request(`${BASE_URL}/attendance/monthly-calendar?${params}`);
+}
+
+/**
+ * 근무 상태만 빠르게 수정 (근무표 달력 셀 클릭용).
+ * 엔드포인트: PATCH /attendance/{attendanceId}/status?status=
+ * @param {number} attendanceId - 출퇴근 기록 ID
+ * @param {string} status - 상태값 (work/off/annual/half_am/half_pm/absent/early_leave/recommended_off/support)
+ */
+export async function updateAttendanceStatus(attendanceId, status) {
+  const params = new URLSearchParams({ status });
+  return request(`${BASE_URL}/attendance/${attendanceId}/status?${params}`, {
+    method: "PATCH",
+  });
+}
+
+// ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
 

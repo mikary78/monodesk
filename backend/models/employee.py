@@ -7,6 +7,23 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKe
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
+from enum import Enum
+
+
+class AttendanceStatus(str, Enum):
+    """
+    일일 근무 상태 Enum.
+    근무표 달력에서 셀별 상태를 표현합니다.
+    """
+    WORK = "work"                        # 근무
+    OFF = "off"                          # 정기휴무
+    ANNUAL = "annual"                    # 월차
+    HALF_AM = "half_am"                  # 반차 (오전)
+    HALF_PM = "half_pm"                  # 반차 (오후)
+    ABSENT = "absent"                    # 무단결근
+    EARLY_LEAVE = "early_leave"          # 무단조퇴
+    RECOMMENDED_OFF = "recommended_off"  # 권장휴무
+    SUPPORT = "support"                  # 타매장 지원
 
 
 class Employee(Base):
@@ -107,6 +124,14 @@ class AttendanceRecord(Base):
 
     # 메모 (결근/조퇴/지각 사유 등)
     memo = Column(String(200), nullable=True, comment="메모 (결근/지각 사유 등)")
+
+    # 일일 근무 상태 (근무표 달력용)
+    # 허용값: work/off/annual/half_am/half_pm/absent/early_leave/recommended_off/support
+    daily_status = Column(
+        String(20),
+        default="work",
+        comment="일일 근무상태 (work/off/annual/half_am/half_pm/absent/early_leave/recommended_off/support)"
+    )
 
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")

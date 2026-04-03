@@ -105,6 +105,9 @@ class AttendanceRecordBase(BaseModel):
     overtime_hours: float = 0
     night_hours: float = 0
     memo: Optional[str] = None
+    # 일일 근무 상태 (근무표 달력용)
+    # 허용값: work/off/annual/half_am/half_pm/absent/early_leave/recommended_off/support
+    daily_status: Optional[str] = "work"
 
     @field_validator("work_date")
     @classmethod
@@ -138,6 +141,8 @@ class AttendanceRecordUpdate(BaseModel):
     overtime_hours: Optional[float] = None
     night_hours: Optional[float] = None
     memo: Optional[str] = None
+    # 일일 근무 상태 수정 허용
+    daily_status: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

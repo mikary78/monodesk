@@ -287,6 +287,84 @@ def delete_attendance(db: Session, attendance_id: int) -> bool:
     return True
 
 
+def get_monthly_calendar(db: Session, year: int, month: int) -> dict:
+    """
+    해당 월 전체 직원 근태 달력 데이터 반환.
+    반환 형태:
+    {
+      "employees": [{id, name, employment_type, position}],
+      "attendance": {
+        "직원id": {
+          "YYYY-MM-DD": {record_id, status, clock_in, clock_out, work_hours}
+        }
+      }
+    }
+    """
+    # 활성 직원 목록 (고용 형태 → ID 순으로 정렬)
+    employees = db.query(Employee).filter(
+        Employee.is_deleted == 0
+    ).order_by(Employee.employment_type, Employee.id).all()
+
+    # 해당 월 출퇴근 기록 전체 조회 (YYYY-MM- 패턴 매칭)
+    year_month = f"{year:04d}-{month:02d}"
+    records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.work_date.like(f"{year_month}-%"),
+        AttendanceRecord.is_deleted == 0
+    ).all()
+
+    # 직원별 날짜별 맵 초기화
+    attendance_map: Dict[int, Dict[str, Any]] = {}
+    for emp in employees:
+        attendance_map[emp.id] = {}
+
+    # 출퇴근 기록을 {직원id: {날짜: 상세}} 구조로 변환
+    for rec in records:
+        attendance_map[rec.employee_id][rec.work_date] = {
+            "record_id": rec.id,
+            "status": rec.daily_status or "work",
+            "clock_in": rec.clock_in,
+            "clock_out": rec.clock_out,
+            "work_hours": rec.work_hours,
+        }
+
+    return {
+        "employees": [
+            {
+                "id": e.id,
+                "name": e.name,
+                "employment_type": e.employment_type,
+                "position": e.position,
+            }
+            for e in employees
+        ],
+        # JSON 직렬화를 위해 키를 문자열로 변환
+        "attendance": {str(k): v for k, v in attendance_map.items()},
+    }
+
+
+def update_attendance_status(
+    db: Session,
+    attendance_id: int,
+    status: str
+) -> Optional[AttendanceRecord]:
+    """
+    daily_status만 빠르게 수정하는 전용 함수.
+    근무표 달력에서 셀 클릭 시 상태 변경에 사용합니다.
+    """
+    record = db.query(AttendanceRecord).filter(
+        AttendanceRecord.id == attendance_id,
+        AttendanceRecord.is_deleted == 0
+    ).first()
+    if not record:
+        return None
+    record.daily_status = status
+    from datetime import datetime as dt
+    record.updated_at = dt.utcnow()
+    db.commit()
+    db.refresh(record)
+    return record
+
+
 # ─────────────────────────────────────────
 # 급여 계산 서비스 (한국 노동법 기준)
 # ─────────────────────────────────────────
