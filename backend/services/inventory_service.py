@@ -10,14 +10,17 @@ from datetime import datetime
 
 from models.inventory import (
     InventoryCategory, InventoryItem,
-    InventoryAdjustment, PurchaseOrder, PurchaseOrderItem
+    InventoryAdjustment, PurchaseOrder, PurchaseOrderItem,
+    InventorySnapshot
 )
 from schemas.inventory import (
     InventoryCategoryCreate, InventoryCategoryUpdate,
     InventoryItemCreate, InventoryItemUpdate,
     InventoryAdjustmentCreate,
     PurchaseOrderCreate, PurchaseOrderUpdate,
-    ReceiveOrderRequest, InventorySummaryResponse
+    ReceiveOrderRequest, InventorySummaryResponse,
+    InventorySnapshotCreate, InventorySnapshotUpdate,
+    SnapshotSummaryResponse
 )
 
 
@@ -565,3 +568,298 @@ def seed_default_categories(db: Session) -> None:
         for cat_data in default_categories:
             db.add(InventoryCategory(**cat_data))
         db.commit()
+
+
+# ─────────────────────────────────────────
+# 재고 스냅샷 서비스 (월초/월말 재고)
+# 엑셀 8-1.월초재고 / 8-2.월말재고 시트 구현
+# ─────────────────────────────────────────
+
+def _build_snapshot_summary(
+    db: Session, snapshot_type: str, year: int, month: int
+) -> dict:
+    """
+    스냅샷 요약 데이터를 카테고리별로 그룹화하여 빌드합니다.
+    내부 함수로, get_snapshot / generate_snapshot / confirm_snapshot에서 공통 사용합니다.
+
+    반환 구조:
+    {
+      snapshot_type, year, month,
+      is_confirmed, confirmed_at,
+      categories: [{category_id, category_name, category_color, items: [...], subtotal}],
+      grand_total
+    }
+    """
+    # 해당 스냅샷 전체 레코드 조회
+    snapshots = (
+        db.query(InventorySnapshot)
+        .filter(
+            InventorySnapshot.snapshot_type == snapshot_type,
+            InventorySnapshot.year == year,
+            InventorySnapshot.month == month,
+        )
+        .all()
+    )
+
+    # 확정 상태는 첫 번째 레코드 기준으로 판단 (같은 스냅샷은 동일 시각에 일괄 확정됨)
+    is_confirmed = bool(snapshots[0].is_confirmed) if snapshots else False
+    confirmed_at = snapshots[0].confirmed_at if snapshots else None
+
+    # 카테고리별 그룹화: {category_id: {name, color, items[]}}
+    cat_map = {}
+    for snap in snapshots:
+        # 품목 정보 조회 (category 포함)
+        item = db.query(InventoryItem).filter(InventoryItem.id == snap.item_id).first()
+        if not item:
+            continue  # 삭제된 품목은 스킵
+
+        # 카테고리 정보 조회
+        cat = db.query(InventoryCategory).filter(
+            InventoryCategory.id == item.category_id
+        ).first()
+        cat_id = cat.id if cat else 0
+        cat_name = cat.name if cat else "미분류"
+        cat_color = cat.color if cat else "#64748B"
+
+        # 카테고리 그룹이 없으면 초기화
+        if cat_id not in cat_map:
+            cat_map[cat_id] = {
+                "category_id": cat_id,
+                "category_name": cat_name,
+                "category_color": cat_color,
+                "items": [],
+            }
+
+        # 항목 추가
+        cat_map[cat_id]["items"].append({
+            "id": snap.id,
+            "item_id": item.id,
+            "item_name": item.name,
+            "unit": item.unit,
+            "quantity": snap.quantity,
+            "unit_price": snap.unit_price,
+            "amount": snap.amount,
+            "memo": snap.memo,
+        })
+
+    # 카테고리 소계 및 전체 합계 계산
+    categories = []
+    grand_total = 0
+    for cat_data in cat_map.values():
+        subtotal = sum(i["amount"] for i in cat_data["items"])
+        grand_total += subtotal
+        categories.append({**cat_data, "subtotal": subtotal})
+
+    return {
+        "snapshot_type": snapshot_type,
+        "year": year,
+        "month": month,
+        "is_confirmed": is_confirmed,
+        "confirmed_at": confirmed_at,
+        "categories": categories,
+        "grand_total": grand_total,
+    }
+
+
+def get_snapshot(db: Session, snapshot_type: str, year: int, month: int) -> dict:
+    """
+    스냅샷 조회 메인 함수.
+    month_start(월초재고)이고 데이터가 없으면 직전달 month_end(월말재고) 확정본을
+    자동으로 복사하여 이월합니다. (월 마감 → 다음달 시작 자동화)
+
+    @param snapshot_type - "month_start" | "month_end"
+    @param year - 조회 연도
+    @param month - 조회 월
+    """
+    # 해당 스냅샷 레코드 수 확인
+    count = db.query(InventorySnapshot).filter(
+        InventorySnapshot.snapshot_type == snapshot_type,
+        InventorySnapshot.year == year,
+        InventorySnapshot.month == month,
+    ).count()
+
+    # 월초재고가 없으면 직전달 월말재고(확정)에서 자동 이월
+    if count == 0 and snapshot_type == "month_start":
+        # 직전달 연도/월 계산 (1월이면 전년 12월)
+        prev_year = year if month > 1 else year - 1
+        prev_month = month - 1 if month > 1 else 12
+
+        # 직전달 확정된 월말재고 존재 여부 확인
+        prev_end_count = db.query(InventorySnapshot).filter(
+            InventorySnapshot.snapshot_type == "month_end",
+            InventorySnapshot.year == prev_year,
+            InventorySnapshot.month == prev_month,
+            InventorySnapshot.is_confirmed == 1,
+        ).count()
+
+        # 직전달 월말재고가 확정되어 있으면 이월 실행
+        if prev_end_count > 0:
+            _copy_month_end_to_next_start(db, prev_year, prev_month, year, month)
+
+    return _build_snapshot_summary(db, snapshot_type, year, month)
+
+
+def _copy_month_end_to_next_start(
+    db: Session, src_year: int, src_month: int, dst_year: int, dst_month: int
+):
+    """
+    확정된 월말재고를 다음달 월초재고로 복사합니다 (내부 함수).
+    이미 존재하는 월초재고 항목은 덮어쓰지 않습니다 (중복 방지).
+
+    @param src_year/src_month - 복사 원본 (월말재고가 있는 달)
+    @param dst_year/dst_month - 복사 대상 (다음달 월초재고)
+    """
+    # 확정된 원본 월말재고 전체 조회
+    src_snapshots = db.query(InventorySnapshot).filter(
+        InventorySnapshot.snapshot_type == "month_end",
+        InventorySnapshot.year == src_year,
+        InventorySnapshot.month == src_month,
+        InventorySnapshot.is_confirmed == 1,
+    ).all()
+
+    for src in src_snapshots:
+        # 이미 해당 품목의 월초재고가 존재하는지 확인
+        existing = db.query(InventorySnapshot).filter(
+            InventorySnapshot.snapshot_type == "month_start",
+            InventorySnapshot.year == dst_year,
+            InventorySnapshot.month == dst_month,
+            InventorySnapshot.item_id == src.item_id,
+        ).first()
+
+        # 중복이 없는 경우에만 이월 복사
+        if not existing:
+            new_snap = InventorySnapshot(
+                snapshot_type="month_start",
+                year=dst_year,
+                month=dst_month,
+                item_id=src.item_id,
+                quantity=src.quantity,
+                unit_price=src.unit_price,
+                amount=src.amount,
+                # 이월 출처를 메모로 기록
+                memo=f"{src_year}년 {src_month}월 월말재고에서 이월",
+            )
+            db.add(new_snap)
+
+    db.commit()
+
+
+def generate_snapshot(db: Session, snapshot_type: str, year: int, month: int) -> dict:
+    """
+    현재 재고(inventory_items.current_quantity) 기준으로 스냅샷 초안을 자동 생성합니다.
+    이미 확정된 스냅샷은 덮어쓰지 않으며, 미확정 상태인 경우 기존 데이터를 삭제 후 재생성합니다.
+
+    @param snapshot_type - "month_start" | "month_end"
+    @param year - 연도
+    @param month - 월
+    """
+    # 확정된 스냅샷이 있는지 먼저 확인
+    confirmed = db.query(InventorySnapshot).filter(
+        InventorySnapshot.snapshot_type == snapshot_type,
+        InventorySnapshot.year == year,
+        InventorySnapshot.month == month,
+        InventorySnapshot.is_confirmed == 1,
+    ).first()
+
+    # 이미 확정된 경우 재생성 불가
+    if confirmed:
+        raise ValueError("이미 확정된 스냅샷은 재생성할 수 없습니다.")
+
+    # 미확정 기존 데이터 삭제 후 재생성 (깨끗한 상태로 리셋)
+    db.query(InventorySnapshot).filter(
+        InventorySnapshot.snapshot_type == snapshot_type,
+        InventorySnapshot.year == year,
+        InventorySnapshot.month == month,
+        InventorySnapshot.is_confirmed == 0,
+    ).delete()
+
+    # 삭제되지 않은 모든 품목의 현재 재고로 스냅샷 생성
+    items = db.query(InventoryItem).filter(InventoryItem.is_deleted == 0).all()
+    for item in items:
+        # 금액 = 수량 × 단가 (소수점 반올림 후 정수 저장)
+        amount = int(round(item.current_quantity * (item.unit_price or 0)))
+        snap = InventorySnapshot(
+            snapshot_type=snapshot_type,
+            year=year,
+            month=month,
+            item_id=item.id,
+            quantity=item.current_quantity,
+            unit_price=int(item.unit_price or 0),
+            amount=amount,
+        )
+        db.add(snap)
+
+    db.commit()
+    return _build_snapshot_summary(db, snapshot_type, year, month)
+
+
+def update_snapshot_item(
+    db: Session, snapshot_id: int, data: InventorySnapshotUpdate
+) -> Optional[InventorySnapshot]:
+    """
+    스냅샷 개별 항목의 수량/단가를 수정합니다 (확정 전만 가능).
+    amount(금액)는 수정 후 quantity × unit_price로 자동 재계산됩니다.
+
+    @param snapshot_id - 수정할 스냅샷 항목 ID
+    @param data - 수정 데이터 (quantity, unit_price, memo)
+    @returns 수정된 InventorySnapshot 객체 (없으면 None)
+    """
+    # 스냅샷 항목 조회
+    snap = db.query(InventorySnapshot).filter(InventorySnapshot.id == snapshot_id).first()
+    if not snap:
+        return None  # 존재하지 않는 항목
+
+    # 확정된 스냅샷은 수정 불가
+    if snap.is_confirmed:
+        raise ValueError("확정된 스냅샷은 수정할 수 없습니다.")
+
+    # 입력된 필드만 업데이트 (exclude_unset: 입력하지 않은 필드는 건너뜀)
+    update_data = data.model_dump(exclude_unset=True)
+    for k, v in update_data.items():
+        setattr(snap, k, v)
+
+    # 금액 자동 재계산 (수량 × 단가)
+    snap.amount = int(round(snap.quantity * snap.unit_price))
+
+    db.commit()
+    db.refresh(snap)
+    return snap
+
+
+def confirm_snapshot(db: Session, snapshot_type: str, year: int, month: int) -> dict:
+    """
+    스냅샷을 확정 처리합니다.
+    확정 후에는 수정이 불가하며, month_end(월말재고) 확정 시
+    다음달 month_start(월초재고)를 자동으로 생성합니다.
+
+    @param snapshot_type - "month_start" | "month_end"
+    @param year - 연도
+    @param month - 월
+    """
+    # 확정 대상 스냅샷 전체 조회
+    snapshots = db.query(InventorySnapshot).filter(
+        InventorySnapshot.snapshot_type == snapshot_type,
+        InventorySnapshot.year == year,
+        InventorySnapshot.month == month,
+    ).all()
+
+    # 데이터가 없으면 확정 불가
+    if not snapshots:
+        raise ValueError("확정할 스냅샷 데이터가 없습니다.")
+
+    # 현재 시각으로 일괄 확정 처리
+    now = datetime.utcnow()
+    for snap in snapshots:
+        snap.is_confirmed = 1
+        snap.confirmed_at = now
+
+    db.commit()
+
+    # 월말재고 확정 시 → 다음달 월초재고로 자동 이월
+    if snapshot_type == "month_end":
+        # 다음달 연도/월 계산 (12월이면 내년 1월)
+        next_year = year if month < 12 else year + 1
+        next_month = month + 1 if month < 12 else 1
+        _copy_month_end_to_next_start(db, year, month, next_year, next_month)
+
+    return _build_snapshot_summary(db, snapshot_type, year, month)

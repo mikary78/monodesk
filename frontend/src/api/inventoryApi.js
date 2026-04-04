@@ -290,3 +290,65 @@ export function formatDate(dateStr) {
   if (!dateStr) return "-";
   return dateStr.replace(/-/g, ".");
 }
+
+
+// ─────────────────────────────────────────
+// 재고 스냅샷 API (월초/월말 재고)
+// 엑셀 8-1.월초재고 / 8-2.월말재고 시트에 대응합니다.
+// ─────────────────────────────────────────
+
+/**
+ * 재고 스냅샷 조회.
+ * month_start(월초재고)이고 데이터가 없으면 서버에서 직전달 month_end를 자동 복사합니다.
+ * @param {string} type - "month_start" | "month_end"
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ * @returns {Promise<object>} SnapshotSummaryResponse (카테고리별 그룹 + 합계)
+ */
+export async function getSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/${type}/${year}/${month}`);
+}
+
+/**
+ * 스냅샷 확정 처리.
+ * 확정 후에는 수정 불가. month_end 확정 시 다음달 month_start가 자동 생성됩니다.
+ * @param {string} type - "month_start" | "month_end"
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ * @returns {Promise<object>} SnapshotSummaryResponse (확정 처리된 스냅샷)
+ */
+export async function confirmSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ snapshot_type: type, year, month }),
+  });
+}
+
+/**
+ * 스냅샷 항목 수량/단가 수정 (확정 전만 가능).
+ * amount(금액)는 서버에서 quantity × unit_price로 자동 재계산됩니다.
+ * @param {number} id - 수정할 스냅샷 항목 ID
+ * @param {object} data - { quantity, unit_price, memo }
+ * @returns {Promise<object>} SnapshotSummaryResponse (수정 후 전체 스냅샷)
+ */
+export async function updateSnapshotItem(id, data) {
+  return request(`${BASE_URL}/snapshot/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 현재 재고 기준으로 스냅샷 초안 자동 생성.
+ * inventory_items.current_quantity 값을 기준으로 스냅샷을 생성합니다.
+ * 이미 확정된 스냅샷이 있으면 서버에서 400 에러를 반환합니다.
+ * @param {string} type - "month_start" | "month_end"
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ * @returns {Promise<object>} SnapshotSummaryResponse (생성된 초안)
+ */
+export async function generateSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/generate/${type}/${year}/${month}`, {
+    method: "POST",
+  });
+}

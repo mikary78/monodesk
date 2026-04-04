@@ -281,3 +281,98 @@ class InventorySummaryResponse(BaseModel):
     pending_orders: int
     # 재고 부족 품목 목록 (알림용)
     low_stock_items: List[dict]
+
+
+# ─────────────────────────────────────────
+# 재고 스냅샷 스키마 (월초/월말 재고)
+# 엑셀 8-1.월초재고 / 8-2.월말재고 시트 구현
+# ─────────────────────────────────────────
+
+class InventorySnapshotCreate(BaseModel):
+    """재고 스냅샷 항목 생성 요청 스키마"""
+    # 스냅샷 유형: month_start(월초) 또는 month_end(월말)
+    snapshot_type: str = Field(..., description="스냅샷 유형 (month_start/month_end)")
+    # 연도 (2020~2099 허용)
+    year: int = Field(..., ge=2020, le=2099)
+    # 월 (1~12 허용)
+    month: int = Field(..., ge=1, le=12)
+    # 품목 ID
+    item_id: int = Field(..., gt=0)
+    # 재고 수량 (0 이상)
+    quantity: float = Field(0, ge=0)
+    # 매입 단가 (0 이상)
+    unit_price: int = Field(0, ge=0)
+    memo: Optional[str] = None
+
+    @field_validator("snapshot_type")
+    @classmethod
+    def validate_snapshot_type(cls, v):
+        """스냅샷 유형 유효성 검사 — month_start 또는 month_end만 허용"""
+        if v not in ("month_start", "month_end"):
+            raise ValueError("snapshot_type은 month_start 또는 month_end이어야 합니다.")
+        return v
+
+
+class InventorySnapshotUpdate(BaseModel):
+    """재고 스냅샷 항목 수정 요청 스키마 (확정 전만 가능)"""
+    # 수정할 수량 (선택 입력)
+    quantity: Optional[float] = Field(None, ge=0)
+    # 수정할 단가 (선택 입력)
+    unit_price: Optional[int] = Field(None, ge=0)
+    memo: Optional[str] = None
+
+
+class InventorySnapshotItemResponse(BaseModel):
+    """스냅샷 개별 항목 응답 스키마 (테이블 행 단위)"""
+    id: int
+    item_id: int
+    item_name: str
+    unit: str
+    quantity: float
+    unit_price: int
+    amount: int
+    memo: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SnapshotCategoryGroup(BaseModel):
+    """카테고리별 스냅샷 그룹 (테이블 섹션 단위)"""
+    category_id: int
+    category_name: str
+    category_color: str
+    items: List[InventorySnapshotItemResponse]
+    # 해당 카테고리의 금액 소계
+    subtotal: int
+
+
+class SnapshotConfirmRequest(BaseModel):
+    """스냅샷 확정 요청 스키마"""
+    # 확정할 스냅샷 유형
+    snapshot_type: str
+    year: int
+    month: int
+
+    @field_validator("snapshot_type")
+    @classmethod
+    def validate_snapshot_type(cls, v):
+        """스냅샷 유형 유효성 검사"""
+        if v not in ("month_start", "month_end"):
+            raise ValueError("snapshot_type은 month_start 또는 month_end이어야 합니다.")
+        return v
+
+
+class SnapshotSummaryResponse(BaseModel):
+    """재고 스냅샷 전체 요약 응답 (페이지 전체 데이터)"""
+    # 스냅샷 유형 (month_start / month_end)
+    snapshot_type: str
+    year: int
+    month: int
+    # 확정 여부
+    is_confirmed: bool
+    # 확정 처리 일시 (미확정이면 None)
+    confirmed_at: Optional[datetime] = None
+    # 카테고리별 그룹 목록
+    categories: List[SnapshotCategoryGroup]
+    # 전체 합계 금액 (원)
+    grand_total: int
