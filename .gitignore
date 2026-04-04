@@ -6,6 +6,7 @@
 # ── 실제 데이터 (절대 업로드 금지) ──
 /database/*.db
 /database/chromadb/
+backend/monodesk.db
 
 # ── 업로드 파일 (영수증, 문서, 음성) ──
 /uploads/
@@ -52,3 +53,4 @@ desktop.ini
 # ── 로그 파일 ──
 *.log
 logs/
+# backend/monodesk.db
