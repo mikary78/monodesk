@@ -37,7 +37,8 @@ build/
 *.bin
 *.gguf
 *.safetensors
-models/
+# AI 모델 저장 폴더 (루트 기준 models/ 만 제외, backend/models/ 은 제외하지 않음)
+/models/
 
 # ── OS 시스템 파일 ──
 .DS_Store

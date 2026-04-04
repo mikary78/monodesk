@@ -10,14 +10,16 @@ from datetime import datetime
 
 from models.inventory import (
     InventoryCategory, InventoryItem,
-    InventoryAdjustment, PurchaseOrder, PurchaseOrderItem
+    InventoryAdjustment, PurchaseOrder, PurchaseOrderItem,
+    DailyPriceRecord
 )
 from schemas.inventory import (
     InventoryCategoryCreate, InventoryCategoryUpdate,
     InventoryItemCreate, InventoryItemUpdate,
     InventoryAdjustmentCreate,
     PurchaseOrderCreate, PurchaseOrderUpdate,
-    ReceiveOrderRequest, InventorySummaryResponse
+    ReceiveOrderRequest, InventorySummaryResponse,
+    DailyPriceRecordCreate
 )
 
 
@@ -565,3 +567,200 @@ def seed_default_categories(db: Session) -> None:
         for cat_data in default_categories:
             db.add(InventoryCategory(**cat_data))
         db.commit()
+
+
+# ─────────────────────────────────────────
+# 데일리 단가 서비스
+# ─────────────────────────────────────────
+
+def get_daily_price_grid(db: Session, year: int, month: int) -> dict:
+    """
+    해당 월 데일리 단가 그리드 전체 반환.
+    is_daily_price_tracked=True(1) 품목만 조회합니다.
+    """
+    import calendar
+    days_in_month = calendar.monthrange(year, month)[1]
+    year_month = f"{year:04d}-{month:02d}"
+
+    # 추적 대상 품목 조회 (카테고리 ID 순 정렬)
+    tracked_items = (
+        db.query(InventoryItem)
+        .filter(InventoryItem.is_daily_price_tracked == 1, InventoryItem.is_deleted == 0)
+        .order_by(InventoryItem.category_id, InventoryItem.id)
+        .all()
+    )
+
+    if not tracked_items:
+        return {
+            "year": year, "month": month, "days_in_month": days_in_month,
+            "items": [], "daily_totals": {}
+        }
+
+    item_ids = [item.id for item in tracked_items]
+
+    # 해당 월 단가 기록 전체 조회
+    records = (
+        db.query(DailyPriceRecord)
+        .filter(
+            DailyPriceRecord.item_id.in_(item_ids),
+            DailyPriceRecord.record_date.like(f"{year_month}-%")
+        )
+        .all()
+    )
+
+    # 품목×날짜 인덱스 구성 {item_id: {date_str: record}}
+    record_map = {}
+    for rec in records:
+        if rec.item_id not in record_map:
+            record_map[rec.item_id] = {}
+        record_map[rec.item_id][rec.record_date] = rec
+
+    # 날짜별 합계 계산 (0인 날짜는 제외)
+    daily_totals = {}
+    for d in range(1, days_in_month + 1):
+        date_str = f"{year_month}-{d:02d}"
+        total = sum(
+            record_map.get(item.id, {}).get(date_str).amount or 0
+            for item in tracked_items
+            if record_map.get(item.id, {}).get(date_str) is not None
+        )
+        if total > 0:
+            daily_totals[date_str] = total
+
+    # 품목별 행 데이터 구성
+    items_data = []
+    for item in tracked_items:
+        item_records = record_map.get(item.id, {})
+        monthly_total = sum(r.amount or 0 for r in item_records.values())
+        records_dict = {}
+        for date_str, rec in item_records.items():
+            records_dict[date_str] = {
+                "record_id": rec.id,
+                "quantity": rec.quantity,
+                "unit_price": rec.unit_price,
+                "amount": rec.amount,
+                "vendor": rec.vendor,
+            }
+        items_data.append({
+            "item_id": item.id,
+            "item_name": item.name,
+            "unit": item.unit,
+            "monthly_total": monthly_total,
+            "records": records_dict,
+        })
+
+    return {
+        "year": year, "month": month, "days_in_month": days_in_month,
+        "items": items_data, "daily_totals": daily_totals,
+    }
+
+
+def save_daily_price(db: Session, data: DailyPriceRecordCreate) -> DailyPriceRecord:
+    """
+    데일리 단가 기록 저장 또는 업데이트 (UPSERT).
+    amount는 quantity × unit_price로 서비스 레이어에서 자동 계산합니다.
+    """
+    # 금액 자동 계산 (반올림 후 정수 변환)
+    amount = int(round(data.quantity * data.unit_price))
+
+    # 기존 기록 조회 (같은 품목 + 날짜 조합)
+    existing = (
+        db.query(DailyPriceRecord)
+        .filter(
+            DailyPriceRecord.item_id == data.item_id,
+            DailyPriceRecord.record_date == data.record_date
+        )
+        .first()
+    )
+
+    if existing:
+        # 기존 기록 업데이트
+        existing.quantity = data.quantity
+        existing.unit_price = data.unit_price
+        existing.amount = amount
+        existing.vendor = data.vendor
+        existing.memo = data.memo
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        # 신규 기록 생성
+        record = DailyPriceRecord(
+            item_id=data.item_id,
+            record_date=data.record_date,
+            quantity=data.quantity,
+            unit_price=data.unit_price,
+            amount=amount,
+            vendor=data.vendor,
+            memo=data.memo,
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return record
+
+
+def get_daily_price_summary(db: Session, year: int, month: int) -> dict:
+    """
+    데일리 단가 월별 품목별 요약.
+    평균/최고/최저 단가 및 총 금액을 반환합니다.
+    0원 단가는 최저/평균 계산에서 제외합니다.
+    """
+    year_month = f"{year:04d}-{month:02d}"
+    records = (
+        db.query(DailyPriceRecord)
+        .filter(DailyPriceRecord.record_date.like(f"{year_month}-%"))
+        .all()
+    )
+
+    # 품목별 집계 {item_id: {quantities, prices, amounts}}
+    item_map = {}
+    for rec in records:
+        if rec.item_id not in item_map:
+            item_map[rec.item_id] = {"quantities": [], "prices": [], "amounts": []}
+        item_map[rec.item_id]["quantities"].append(rec.quantity)
+        # 0원 단가는 평균/최고/최저 계산에서 제외
+        if rec.unit_price > 0:
+            item_map[rec.item_id]["prices"].append(rec.unit_price)
+        item_map[rec.item_id]["amounts"].append(rec.amount or 0)
+
+    items_summary = []
+    total_amount = 0
+    for item_id, data in item_map.items():
+        item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+        if not item:
+            continue
+        prices = data["prices"]
+        item_total = sum(data["amounts"])
+        total_amount += item_total
+        items_summary.append({
+            "item_id": item_id,
+            "item_name": item.name,
+            "unit": item.unit,
+            "total_quantity": round(sum(data["quantities"]), 2),
+            "total_amount": item_total,
+            "avg_unit_price": int(sum(prices) / len(prices)) if prices else 0,
+            "max_unit_price": max(prices) if prices else 0,
+            "min_unit_price": min(prices) if prices else 0,
+            "record_count": len(data["quantities"]),
+        })
+
+    return {"year": year, "month": month, "total_amount": total_amount, "items": items_summary}
+
+
+def toggle_daily_price_tracking(db: Session, item_id: int) -> Optional[InventoryItem]:
+    """
+    데일리 단가 추적 대상 토글.
+    1 → 0 (미추적), 0 → 1 (추적) 으로 전환합니다.
+    """
+    item = db.query(InventoryItem).filter(
+        InventoryItem.id == item_id, InventoryItem.is_deleted == 0
+    ).first()
+    if not item:
+        return None
+    # 현재 값을 반전 (0이면 1로, 1이면 0으로)
+    item.is_daily_price_tracked = 0 if item.is_daily_price_tracked else 1
+    db.commit()
+    db.refresh(item)
+    return item

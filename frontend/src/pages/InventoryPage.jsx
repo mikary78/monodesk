@@ -6,12 +6,14 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Package, AlertTriangle, ShoppingCart, Truck,
-  RotateCcw
+  RotateCcw, TrendingUp
 } from "lucide-react";
 import { fetchInventorySummary, seedInventoryCategories } from "../api/inventoryApi";
 import InventoryItemTab from "../components/modules/inventory/InventoryItemTab";
 import PurchaseOrderTab from "../components/modules/inventory/PurchaseOrderTab";
 import AdjustmentHistoryTab from "../components/modules/inventory/AdjustmentHistoryTab";
+// 데일리 단가 그리드 컴포넌트
+import DailyPriceGrid from "../components/modules/inventory/DailyPriceGrid";
 
 // ─────────────────────────────────────────
 // KPI 요약 카드 컴포넌트
@@ -74,9 +76,10 @@ const LowStockBanner = ({ items, onDismiss }) => {
 // ─────────────────────────────────────────
 
 const TAB_LIST = [
-  { id: "items",   label: "재고 품목",   icon: Package },
-  { id: "orders",  label: "발주서",      icon: Truck },
-  { id: "history", label: "조정 이력",   icon: RotateCcw },
+  { id: "items",        label: "재고 품목",   icon: Package },
+  { id: "orders",       label: "발주서",      icon: Truck },
+  { id: "history",      label: "조정 이력",   icon: RotateCcw },
+  { id: "daily-price",  label: "데일리 단가", icon: TrendingUp },
 ];
 
 // ─────────────────────────────────────────
@@ -224,6 +227,10 @@ const InventoryPage = () => {
           )}
           {activeTab === "history" && (
             <AdjustmentHistoryTab />
+          )}
+          {/* 데일리 단가 탭 — 수산물 등 시가 품목 일별 단가 추적 */}
+          {activeTab === "daily-price" && (
+            <DailyPriceGrid />
           )}
         </div>
       </div>
