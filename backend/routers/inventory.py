@@ -13,7 +13,9 @@ from schemas.inventory import (
     InventoryItemCreate, InventoryItemUpdate, InventoryItemResponse,
     InventoryAdjustmentCreate, InventoryAdjustmentResponse,
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderResponse,
-    ReceiveOrderRequest, InventorySummaryResponse
+    ReceiveOrderRequest, InventorySummaryResponse,
+    DailyPriceRecordCreate, DailyPriceRecordResponse,
+    DailyPriceGridResponse, DailyPriceSummaryResponse
 )
 import services.inventory_service as service
 
@@ -283,3 +285,57 @@ def seed_categories(db: Session = Depends(get_db)):
     """기본 재고 분류 데이터 초기화 (최초 설정 시 1회 사용)"""
     service.seed_default_categories(db)
     return {"success": True, "message": "기본 재고 분류가 생성되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 데일리 단가 API
+# 주의: 고정 경로(/daily-price/summary/)를 동적 경로(/daily-price/{year}/{month})보다 먼저 등록
+# ─────────────────────────────────────────
+
+@router.get("/daily-price/summary/{year}/{month}", response_model=DailyPriceSummaryResponse)
+def get_daily_price_summary(
+    year: int, month: int,
+    db: Session = Depends(get_db)
+):
+    """데일리 단가 월별 품목별 요약 (평균/최고/최저 단가 포함)"""
+    try:
+        return service.get_daily_price_summary(db, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"요약 조회 중 오류: {str(e)}")
+
+
+@router.get("/daily-price/{year}/{month}", response_model=DailyPriceGridResponse)
+def get_daily_price_grid(
+    year: int, month: int,
+    db: Session = Depends(get_db)
+):
+    """해당 월 데일리 단가 그리드 전체 반환 (is_daily_price_tracked=True 품목만)"""
+    try:
+        return service.get_daily_price_grid(db, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"그리드 조회 중 오류: {str(e)}")
+
+
+@router.post("/daily-price", response_model=DailyPriceRecordResponse, status_code=201)
+def save_daily_price(data: DailyPriceRecordCreate, db: Session = Depends(get_db)):
+    """데일리 단가 기록 저장/업데이트 (UPSERT). amount = quantity × unit_price 자동계산"""
+    try:
+        return service.save_daily_price(db, data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"단가 기록 저장 중 오류: {str(e)}")
+
+
+@router.patch("/items/{item_id}/track")
+def toggle_price_tracking(item_id: int, db: Session = Depends(get_db)):
+    """
+    데일리 단가 추적 대상 토글 (is_daily_price_tracked ON/OFF).
+    주의: PATCH 메서드이므로 기존 GET/PUT/DELETE /items/{item_id}와 충돌 없음.
+    """
+    result = service.toggle_daily_price_tracking(db, item_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="품목을 찾을 수 없습니다.")
+    return {
+        "success": True,
+        "item_id": item_id,
+        "is_daily_price_tracked": bool(result.is_daily_price_tracked)
+    }

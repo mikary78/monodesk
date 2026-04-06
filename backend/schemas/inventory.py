@@ -66,6 +66,8 @@ class InventoryItemBase(BaseModel):
     default_order_quantity: float = Field(1, gt=0, description="기본 발주 수량")
     unit_price: float = Field(0, ge=0, description="단가 (원)")
     supplier: Optional[str] = Field(None, max_length=100, description="주 거래처명")
+    # 데일리 단가 추적 대상 여부
+    is_daily_price_tracked: bool = False
     memo: Optional[str] = None
 
 
@@ -83,6 +85,8 @@ class InventoryItemUpdate(BaseModel):
     default_order_quantity: Optional[float] = Field(None, gt=0)
     unit_price: Optional[float] = Field(None, ge=0)
     supplier: Optional[str] = None
+    # 데일리 단가 추적 대상 여부 (부분 수정 시 사용)
+    is_daily_price_tracked: Optional[bool] = None
     memo: Optional[str] = None
 
 
@@ -281,3 +285,87 @@ class InventorySummaryResponse(BaseModel):
     pending_orders: int
     # 재고 부족 품목 목록 (알림용)
     low_stock_items: List[dict]
+
+
+# ─────────────────────────────────────────
+# 데일리 단가 기록 스키마
+# ─────────────────────────────────────────
+
+class DailyPriceRecordCreate(BaseModel):
+    """데일리 단가 기록 생성/수정 요청 스키마"""
+    item_id: int = Field(..., gt=0, description="품목 ID")
+    record_date: str = Field(..., description="기록 날짜 (YYYY-MM-DD)")
+    quantity: float = Field(0, ge=0, description="당일 구매 수량")
+    unit_price: int = Field(0, ge=0, description="당일 매입 단가 (원)")
+    vendor: Optional[str] = Field(None, max_length=100, description="당일 구매처")
+    memo: Optional[str] = None
+
+    @field_validator("record_date")
+    @classmethod
+    def validate_record_date(cls, v):
+        """날짜 형식 검증"""
+        return validate_date_format(v)
+
+
+class DailyPriceRecordResponse(BaseModel):
+    """데일리 단가 기록 응답 스키마"""
+    id: int
+    item_id: int
+    record_date: str
+    quantity: float
+    unit_price: int
+    amount: int        # 자동 계산값 (quantity × unit_price)
+    vendor: Optional[str] = None
+    memo: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DailyPriceItemRecord(BaseModel):
+    """그리드 내 날짜별 단가 기록 (품목 단위)"""
+    record_id: Optional[int] = None    # DB id (없으면 미입력)
+    quantity: float = 0
+    unit_price: int = 0
+    amount: int = 0
+    vendor: Optional[str] = None
+
+
+class DailyPriceItemRow(BaseModel):
+    """그리드 1행 (품목 + 날짜별 기록)"""
+    item_id: int
+    item_name: str
+    unit: str
+    monthly_total: int              # 해당 월 합계 금액
+    records: dict                   # { "YYYY-MM-DD": DailyPriceItemRecord }
+
+
+class DailyPriceGridResponse(BaseModel):
+    """데일리 단가 그리드 전체 응답"""
+    year: int
+    month: int
+    days_in_month: int             # 해당 월 일수
+    items: List[DailyPriceItemRow]
+    daily_totals: dict             # { "YYYY-MM-DD": int } 날짜별 합계
+
+
+class DailyPriceSummaryItem(BaseModel):
+    """데일리 단가 품목별 요약"""
+    item_id: int
+    item_name: str
+    unit: str
+    total_quantity: float          # 월 총 구매량
+    total_amount: int              # 월 총 금액
+    avg_unit_price: int            # 평균 단가
+    max_unit_price: int            # 최고 단가
+    min_unit_price: int            # 최저 단가 (0 제외)
+    record_count: int              # 입력된 날짜 수
+
+
+class DailyPriceSummaryResponse(BaseModel):
+    """데일리 단가 월별 요약 응답"""
+    year: int
+    month: int
+    total_amount: int              # 전체 합계
+    items: List[DailyPriceSummaryItem]

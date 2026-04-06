@@ -290,3 +290,50 @@ export function formatDate(dateStr) {
   if (!dateStr) return "-";
   return dateStr.replace(/-/g, ".");
 }
+
+// ─────────────────────────────────────────
+// 데일리 단가 API
+// ─────────────────────────────────────────
+
+/**
+ * 월별 데일리 단가 그리드 조회.
+ * is_daily_price_tracked=True 품목의 전체 그리드 반환.
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export async function getDailyPriceGrid(year, month) {
+  return request(`${BASE_URL}/daily-price/${year}/${month}`);
+}
+
+/**
+ * 데일리 단가 기록 저장/업데이트 (UPSERT).
+ * amount = quantity × unit_price 서버에서 자동 계산.
+ * @param {object} data - { item_id, record_date, quantity, unit_price, vendor, memo }
+ */
+export async function saveDailyPrice(data) {
+  return request(`${BASE_URL}/daily-price`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 데일리 단가 월별 품목별 요약 조회.
+ * 평균/최고/최저 단가 및 총 금액 포함.
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export async function getDailyPriceSummary(year, month) {
+  return request(`${BASE_URL}/daily-price/summary/${year}/${month}`);
+}
+
+/**
+ * 데일리 단가 추적 대상 토글 (ON/OFF).
+ * is_daily_price_tracked 플래그를 반전시킵니다.
+ * @param {number} itemId - 품목 ID
+ */
+export async function togglePriceTracking(itemId) {
+  return request(`${BASE_URL}/items/${itemId}/track`, {
+    method: "PATCH",
+  });
+}

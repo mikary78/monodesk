@@ -7,6 +7,7 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKe
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
+import datetime as dt_module
 
 
 class InventoryCategory(Base):
@@ -58,6 +59,8 @@ class InventoryItem(Base):
     unit_price = Column(Float, default=0, comment="단가 (원)")
     # 주 거래처명
     supplier = Column(String(100), nullable=True, comment="주 거래처명")
+    # 데일리 단가 추적 대상 여부 (0: 미추적, 1: 추적)
+    is_daily_price_tracked = Column(Integer, default=0, comment="데일리 단가 추적 여부 (0: 미추적, 1: 추적)")
     # 메모 (특이사항, 보관방법 등)
     memo = Column(Text, nullable=True, comment="메모")
     # 소프트 삭제
@@ -71,6 +74,8 @@ class InventoryItem(Base):
     adjustments = relationship("InventoryAdjustment", back_populates="item")
     # 발주 품목과의 관계
     order_items = relationship("PurchaseOrderItem", back_populates="item")
+    # 데일리 단가 기록과의 관계
+    daily_price_records = relationship("DailyPriceRecord", back_populates="item")
 
     @property
     def is_low_stock(self) -> bool:
@@ -204,3 +209,35 @@ class PurchaseOrderItem(Base):
 
     def __repr__(self):
         return f"<PurchaseOrderItem(id={self.id}, order_id={self.order_id}, item_id={self.item_id})>"
+
+
+class DailyPriceRecord(Base):
+    """
+    데일리 단가 기록 테이블.
+    수산물 등 시가 품목의 일별 매입 단가와 수량을 추적합니다.
+    """
+    __tablename__ = "daily_price_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 품목 (외래키)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False, comment="품목 ID")
+    # 기록 날짜 (YYYY-MM-DD)
+    record_date = Column(String(10), nullable=False, index=True, comment="기록 날짜")
+    # 당일 구매 수량
+    quantity = Column(Float, default=0, comment="당일 구매 수량")
+    # 당일 매입 단가 (원)
+    unit_price = Column(Integer, default=0, comment="당일 매입 단가 (원)")
+    # 당일 금액 (quantity × unit_price, 서비스 레이어에서 자동 계산)
+    amount = Column(Integer, default=0, comment="당일 금액 (원)")
+    # 당일 구매처
+    vendor = Column(String(100), nullable=True, comment="당일 구매처")
+    # 메모
+    memo = Column(Text, nullable=True, comment="메모")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    # 품목과의 관계
+    item = relationship("InventoryItem", back_populates="daily_price_records")
+
+    def __repr__(self):
+        return f"<DailyPriceRecord(id={self.id}, item_id={self.item_id}, date={self.record_date}, price={self.unit_price})>"
