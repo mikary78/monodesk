@@ -6,12 +6,14 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Package, AlertTriangle, ShoppingCart, Truck,
-  RotateCcw
+  RotateCcw, BarChart2, Archive
 } from "lucide-react";
 import { fetchInventorySummary, seedInventoryCategories } from "../api/inventoryApi";
 import InventoryItemTab from "../components/modules/inventory/InventoryItemTab";
 import PurchaseOrderTab from "../components/modules/inventory/PurchaseOrderTab";
 import AdjustmentHistoryTab from "../components/modules/inventory/AdjustmentHistoryTab";
+import DailyPriceGrid from "../components/modules/inventory/DailyPriceGrid";
+import InventorySnapshot from "../components/modules/inventory/InventorySnapshot";
 
 // ─────────────────────────────────────────
 // KPI 요약 카드 컴포넌트
@@ -74,9 +76,12 @@ const LowStockBanner = ({ items, onDismiss }) => {
 // ─────────────────────────────────────────
 
 const TAB_LIST = [
-  { id: "items",   label: "재고 품목",   icon: Package },
-  { id: "orders",  label: "발주서",      icon: Truck },
-  { id: "history", label: "조정 이력",   icon: RotateCcw },
+  { id: "items",          label: "재고 품목",   icon: Package   },
+  { id: "orders",         label: "발주서",      icon: Truck     },
+  { id: "history",        label: "조정 이력",   icon: RotateCcw },
+  { id: "daily-price",    label: "데일리 단가", icon: BarChart2 },
+  { id: "snapshot-start", label: "월초재고",    icon: Archive   },
+  { id: "snapshot-end",   label: "월말재고",    icon: Archive   },
 ];
 
 // ─────────────────────────────────────────
@@ -224,6 +229,18 @@ const InventoryPage = () => {
           )}
           {activeTab === "history" && (
             <AdjustmentHistoryTab />
+          )}
+          {/* 데일리 단가 탭 */}
+          {activeTab === "daily-price" && (
+            <DailyPriceGrid />
+          )}
+          {/* 월초재고 스냅샷 탭 */}
+          {activeTab === "snapshot-start" && (
+            <InventorySnapshot snapshotType="month_start" />
+          )}
+          {/* 월말재고 스냅샷 탭 */}
+          {activeTab === "snapshot-end" && (
+            <InventorySnapshot snapshotType="month_end" />
           )}
         </div>
       </div>

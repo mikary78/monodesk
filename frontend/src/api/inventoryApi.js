@@ -310,3 +310,104 @@ export function formatDate(dateStr) {
   if (!dateStr) return "-";
   return dateStr.replace(/-/g, ".");
 }
+
+// ─────────────────────────────────────────
+// 데일리 단가 API
+// 일별 식재료 단가 기록을 관리합니다.
+// ─────────────────────────────────────────
+
+/**
+ * 월별 데일리 단가 그리드 조회.
+ * 추적 중인 품목의 일별 단가 기록을 그리드 형태로 반환합니다.
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ */
+export async function getDailyPriceGrid(year, month) {
+  return request(`${BASE_URL}/daily-price/${year}/${month}`);
+}
+
+/**
+ * 데일리 단가 저장 (upsert).
+ * @param {object} data - { item_id, record_date, quantity, unit_price, vendor, memo }
+ */
+export async function saveDailyPrice(data) {
+  return request(`${BASE_URL}/daily-price`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 월별 데일리 단가 요약 조회.
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ */
+export async function getDailyPriceSummary(year, month) {
+  return request(`${BASE_URL}/daily-price/summary/${year}/${month}`);
+}
+
+/**
+ * 품목 데일리 단가 추적 여부 토글.
+ * @param {number} itemId - 재고 품목 ID
+ * @param {boolean} isTracked - 추적 여부
+ */
+export async function togglePriceTracking(itemId, isTracked) {
+  return request(`${BASE_URL}/items/${itemId}/track`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_daily_price_tracked: isTracked }),
+  });
+}
+
+// ─────────────────────────────────────────
+// 재고 스냅샷 API
+// 월초/월말 재고 스냅샷을 관리합니다.
+// ─────────────────────────────────────────
+
+/**
+ * 재고 스냅샷 조회.
+ * @param {string} type - "month_start" 또는 "month_end"
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ */
+export async function getSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/${type}/${year}/${month}`);
+}
+
+/**
+ * 현재 재고 기반 스냅샷 초안 자동 생성.
+ * @param {string} type - "month_start" 또는 "month_end"
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export async function generateSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/generate/${type}/${year}/${month}`, {
+    method: "POST",
+  });
+}
+
+/**
+ * 스냅샷 단건 항목 수정.
+ * @param {number} id - 스냅샷 항목 ID
+ * @param {object} data - { quantity, unit_price }
+ */
+export async function updateSnapshotItem(id, data) {
+  return request(`${BASE_URL}/snapshot/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 스냅샷 확정 처리.
+ * 확정 후에는 편집이 불가합니다.
+ * month_end 확정 시 다음 달 month_start에 자동 반영됩니다.
+ * @param {string} type - "month_start" 또는 "month_end"
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export async function confirmSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ snapshot_type: type, year, month }),
+  });
+}

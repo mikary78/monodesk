@@ -1,19 +1,21 @@
 // ============================================================
 // EmployeePage.jsx — 직원 관리 메인 페이지
-// 3개 탭: 직원 목록 / 출퇴근 관리 / 급여 정산
+// 4개 탭: 직원 목록 / 출퇴근 관리 / 급여 정산 / 근무표 달력
 // ============================================================
 
 import { useState } from "react";
-import { Users, ChevronLeft, ChevronRight, UserCheck, Clock, DollarSign } from "lucide-react";
+import { Users, ChevronLeft, ChevronRight, UserCheck, Clock, DollarSign, Calendar } from "lucide-react";
 import EmployeeList from "../components/modules/employee/EmployeeList";
 import AttendanceList from "../components/modules/employee/AttendanceList";
 import SalaryPanel from "../components/modules/employee/SalaryPanel";
+import AttendanceCalendar from "../components/modules/employee/AttendanceCalendar";
 
 // 탭 메뉴 정의
 const TABS = [
-  { id: "employees", label: "직원 목록",  Icon: UserCheck },
+  { id: "employees",  label: "직원 목록",   Icon: UserCheck },
   { id: "attendance", label: "출퇴근 관리", Icon: Clock },
-  { id: "salary",    label: "급여 정산",   Icon: DollarSign },
+  { id: "salary",     label: "급여 정산",   Icon: DollarSign },
+  { id: "calendar",   label: "근무표 달력", Icon: Calendar },
 ];
 
 const EmployeePage = () => {
@@ -123,6 +125,11 @@ const EmployeePage = () => {
         {/* 급여 정산 탭 */}
         {activeTab === "salary" && (
           <SalaryPanel year={year} month={month} />
+        )}
+
+        {/* 근무표 달력 탭 */}
+        {activeTab === "calendar" && (
+          <AttendanceCalendar year={year} month={month} />
         )}
       </div>
     </div>
