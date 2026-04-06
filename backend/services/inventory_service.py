@@ -450,7 +450,12 @@ def receive_order(
         quantity_before = inventory_item.current_quantity
         inventory_item.current_quantity += received_qty
 
-        # 입고 이력 생성 (갱신된 실제 단가 기준으로 기록)
+        # 해당 품목의 매입 출처 결정:
+        # ReceiveOrderItem에 purchase_source가 있으면 사용, 없으면 'direct'로 기본 설정
+        # 프론트엔드에서 발주서 단위로 선택한 출처가 각 품목에 담겨서 전달됩니다
+        purchase_src = getattr(receive_item, 'purchase_source', 'direct') or 'direct'
+
+        # 입고 이력 생성 (갱신된 실제 단가 + 매입 출처 기준으로 기록)
         adjustment = InventoryAdjustment(
             item_id=order_item.item_id,
             adjustment_type="입고",
@@ -460,7 +465,8 @@ def receive_order(
             adjustment_date=data.received_date,
             purchase_order_id=order_id,
             unit_price=actual_price,
-            memo=f"발주서 {order.order_number} 입고 처리"
+            memo=f"발주서 {order.order_number} 입고 처리",
+            purchase_source=purchase_src,  # 매입 출처 저장 (엑셀 3.원·부재료 구분)
         )
         db.add(adjustment)
 
@@ -546,6 +552,81 @@ def get_inventory_summary(db: Session) -> InventorySummaryResponse:
 # ─────────────────────────────────────────
 # 기본 데이터 초기화 서비스
 # ─────────────────────────────────────────
+
+# ─────────────────────────────────────────
+# 매입 출처별 집계 서비스
+# ─────────────────────────────────────────
+
+# 매입 출처 코드 → 한국어 레이블 매핑
+# 화면 표시 및 집계 결과의 레이블로 사용됩니다
+PURCHASE_SOURCE_LABELS = {
+    "headquarters": "본사구매 (계좌이체)",
+    "site_card": "현장구매 법카",
+    "site_cash": "현장구매 시재",
+    "direct": "기타 직접구매",
+}
+
+
+def get_purchase_summary(db: Session, year: int, month: int) -> dict:
+    """
+    월별 매입 출처별 집계.
+    입고(adjustment_type='입고') 기록의 purchase_source별 금액 합계를 반환합니다.
+    금액 계산 기준: |quantity_change| × unit_price
+
+    엑셀 3.원·부재료 시트의 본사구매/현장구매(법카)/현장구매(시재)/기타 구분 집계와
+    동일한 결과를 제공합니다.
+
+    Args:
+        db: SQLAlchemy 세션
+        year: 집계 연도
+        month: 집계 월
+
+    Returns:
+        dict: year, month, grand_total, sources 키를 포함한 집계 결과
+    """
+    # 조회할 연월 문자열 (YYYY-MM 형식) — LIKE 조건으로 해당 월 전체 필터링
+    year_month = f"{year:04d}-{month:02d}"
+
+    # 해당 월의 입고 이력 전체 조회
+    records = db.query(InventoryAdjustment).filter(
+        InventoryAdjustment.adjustment_type == "입고",         # 입고 기록만
+        InventoryAdjustment.adjustment_date.like(f"{year_month}-%"),  # 해당 월
+        InventoryAdjustment.is_deleted == 0,                   # 삭제되지 않은 기록만
+    ).all()
+
+    # 출처별 금액/건수 누적 집계
+    source_map: dict = {}
+    for rec in records:
+        # purchase_source가 None이거나 빈 문자열이면 'direct'로 처리
+        src = rec.purchase_source or "direct"
+        # 금액 = 수량(절대값) × 단가 (단가가 없으면 0으로 처리)
+        amount = abs(rec.quantity_change) * (rec.unit_price or 0)
+        if src not in source_map:
+            source_map[src] = {"total_amount": 0.0, "count": 0}
+        source_map[src]["total_amount"] += amount
+        source_map[src]["count"] += 1
+
+    # 4가지 출처 모두 항목으로 포함 (데이터 없으면 0으로 채움)
+    sources = []
+    for src, label in PURCHASE_SOURCE_LABELS.items():
+        data = source_map.get(src, {"total_amount": 0.0, "count": 0})
+        sources.append({
+            "source": src,
+            "source_label": label,
+            "total_amount": round(data["total_amount"], 0),
+            "count": data["count"],
+        })
+
+    # 전체 합계
+    grand_total = sum(s["total_amount"] for s in sources)
+
+    return {
+        "year": year,
+        "month": month,
+        "grand_total": round(grand_total, 0),
+        "sources": sources,
+    }
+
 
 def seed_default_categories(db: Session) -> None:
     """

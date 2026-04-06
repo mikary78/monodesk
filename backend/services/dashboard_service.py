@@ -313,6 +313,10 @@ def get_dashboard_data(db: Session, year: int, month: int) -> DashboardResponse:
     대시보드 전체 데이터를 집계하여 반환합니다.
     각 모듈(회계/재고/직원)에서 KPI를 수집합니다.
     """
+    # 재고 서비스에서 매입 출처별 집계 함수를 가져옵니다
+    # 순환 import 방지를 위해 함수 내부에서 import합니다
+    from services.inventory_service import get_purchase_summary
+
     # 각 KPI 집계
     profit_loss = _build_profit_loss_kpi(db, year, month)
     monthly_trend = _build_monthly_trend(db, year, month)
@@ -320,6 +324,14 @@ def get_dashboard_data(db: Session, year: int, month: int) -> DashboardResponse:
     salary_kpi = _build_salary_kpi(db, year, month)
     recent_expenses = _build_recent_expenses(db, year, month)
     order_status = _build_order_status(db)
+
+    # 이번 달 매입 출처별 집계 (엑셀 3.원·부재료 시트 구분 데이터)
+    # 오류 발생 시 대시보드 전체가 실패하지 않도록 try-except로 보호
+    try:
+        purchase_summary_data = get_purchase_summary(db, year, month)
+    except Exception:
+        # 집계 실패 시 None으로 처리 (대시보드 나머지 KPI는 정상 반환)
+        purchase_summary_data = None
 
     return DashboardResponse(
         year=year,
@@ -330,4 +342,5 @@ def get_dashboard_data(db: Session, year: int, month: int) -> DashboardResponse:
         salary_kpi=salary_kpi,
         recent_expenses=recent_expenses,
         order_status=order_status,
+        purchase_summary=purchase_summary_data,  # 매입 출처별 집계 포함
     )

@@ -17,6 +17,20 @@ import {
 } from "../../../api/inventoryApi";
 
 // ─────────────────────────────────────────
+// 매입 출처 옵션 상수
+// 엑셀 3.원·부재료 시트의 본사구매/현장구매 구분에 대응합니다.
+// 입고 처리 폼에서 이 목록으로 버튼을 렌더링합니다.
+// ─────────────────────────────────────────
+
+const PURCHASE_SOURCE_OPTIONS = [
+  { value: "headquarters", label: "본사구매",  sub: "계좌이체" },
+  { value: "site_card",    label: "현장구매",  sub: "법카" },
+  { value: "site_cash",    label: "현장구매",  sub: "시재" },
+  { value: "direct",       label: "기타",      sub: "직접구매" },
+];
+
+
+// ─────────────────────────────────────────
 // 발주서 생성 모달
 // ─────────────────────────────────────────
 
@@ -316,6 +330,9 @@ const ReceiveOrderModal = ({ order, onSave, onClose }) => {
   );
   const [receivedDate, setReceivedDate] = useState(today);
   const [memo, setMemo] = useState("");
+  // 매입 출처 상태 (발주서 단위로 하나 선택, 모든 품목에 동일하게 적용)
+  // 기본값 "direct"는 기타 직접구매를 의미합니다
+  const [purchaseSource, setPurchaseSource] = useState("direct");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -340,6 +357,9 @@ const ReceiveOrderModal = ({ order, onSave, onClose }) => {
           order_item_id: ri.order_item_id,
           received_quantity: ri.received_quantity,
           unit_price: ri.unit_price,
+          // 선택한 매입 출처를 각 품목에 동일하게 포함
+          // 백엔드 receive_order 서비스에서 InventoryAdjustment.purchase_source로 저장됩니다
+          purchase_source: purchaseSource,
         })),
       });
     } catch (err) {
@@ -388,6 +408,41 @@ const ReceiveOrderModal = ({ order, onSave, onClose }) => {
                 placeholder="특이사항"
               />
             </div>
+          </div>
+
+          {/* 매입 출처 선택 — 발주서 전체에 동일하게 적용됩니다 */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-2">매입 출처</label>
+            <div className="flex gap-2 flex-wrap">
+              {PURCHASE_SOURCE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setPurchaseSource(opt.value)}
+                  className={`h-8 px-3 text-xs font-medium rounded-md border transition-colors ${
+                    purchaseSource === opt.value
+                      ? "bg-blue-500 text-white border-blue-500"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-blue-300"
+                  }`}
+                >
+                  {opt.label}
+                  <span
+                    className={`ml-1 ${
+                      purchaseSource === opt.value ? "text-blue-100" : "text-slate-400"
+                    }`}
+                  >
+                    ({opt.sub})
+                  </span>
+                </button>
+              ))}
+            </div>
+            {/* 현장구매 선택 시: 지출관리 별도 등록 안내 메시지 */}
+            {(purchaseSource === "site_card" || purchaseSource === "site_cash") && (
+              <p className="text-xs text-amber-600 mt-1.5">
+                {purchaseSource === "site_card" ? "법인카드" : "현금 시재"} 구매 내역은
+                지출 관리에서 별도 등록해주세요.
+              </p>
+            )}
           </div>
 
           {/* 품목별 입고 수량 */}

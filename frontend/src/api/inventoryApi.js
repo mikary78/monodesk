@@ -216,6 +216,26 @@ export async function seedInventoryCategories() {
 }
 
 // ─────────────────────────────────────────
+// 매입 출처별 집계 API
+// 엑셀 3.원·부재료 시트의 본사구매/현장구매 구분별 월 합계를 조회합니다.
+// ─────────────────────────────────────────
+
+/**
+ * 월별 매입 출처별 집계 조회.
+ * 본사구매/현장구매(법카/시재)/기타별 입고 금액 합계를 반환합니다.
+ * 엑셀 ★보고서의 원재료 지출 집계와 동일한 데이터를 제공합니다.
+ *
+ * @param {number} year - 조회 연도 (예: 2026)
+ * @param {number} month - 조회 월 (예: 4)
+ * @returns {Promise<PurchaseSummaryResponse>} 출처별 집계 결과
+ *   - grand_total: 전체 합계
+ *   - sources: [{source, source_label, total_amount, count}, ...]
+ */
+export async function getPurchaseSummary(year, month) {
+  return request(`${BASE_URL}/purchases/summary/${year}/${month}`);
+}
+
+// ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
 
