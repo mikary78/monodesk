@@ -9,6 +9,9 @@ from datetime import datetime
 from database import Base
 import datetime as dt_module
 
+# InventorySnapshot 모델에서 UNIQUE 제약 조건을 위해 UniqueConstraint 임포트
+from sqlalchemy import UniqueConstraint
+
 
 class InventoryCategory(Base):
     """
@@ -241,3 +244,41 @@ class DailyPriceRecord(Base):
 
     def __repr__(self):
         return f"<DailyPriceRecord(id={self.id}, item_id={self.item_id}, date={self.record_date}, price={self.unit_price})>"
+
+
+class InventorySnapshot(Base):
+    """
+    월초/월말 재고 스냅샷 테이블.
+    월말 재고를 확정하면 다음달 월초재고로 자동 이월됩니다.
+    엑셀 8-1.월초재고 / 8-2.월말재고 시트에 해당합니다.
+    """
+    __tablename__ = "inventory_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 스냅샷 유형: month_start(월초) | month_end(월말)
+    snapshot_type = Column(String(20), nullable=False, comment="스냅샷 유형 (month_start/month_end)")
+    # 연도 (예: 2026)
+    year = Column(Integer, nullable=False, comment="연도")
+    # 월 (1~12)
+    month = Column(Integer, nullable=False, comment="월")
+    # 품목 (외래키 → inventory_items.id)
+    item_id = Column(Integer, ForeignKey("inventory_items.id"), nullable=False, comment="품목 ID")
+    # 재고 수량 (소수점 허용: 0.5kg 등)
+    quantity = Column(Float, default=0, comment="재고 수량")
+    # 매입 단가 (원)
+    unit_price = Column(Integer, default=0, comment="매입 단가 (원)")
+    # 금액 = quantity × unit_price, 저장 시 자동 계산
+    amount = Column(Integer, default=0, comment="금액 (원)")
+    # 확정 여부 (0: 미확정, 1: 확정) — 확정 후 수정 불가
+    is_confirmed = Column(Integer, default=0, comment="확정 여부 (0: 미확정, 1: 확정)")
+    # 확정 처리 일시
+    confirmed_at = Column(DateTime, nullable=True, comment="확정 일시")
+    # 메모 (이월 출처 등)
+    memo = Column(Text, nullable=True, comment="메모")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+
+    # 품목과의 관계 (스냅샷 → 품목 조회용)
+    item = relationship("InventoryItem")
+
+    def __repr__(self):
+        return f"<InventorySnapshot(id={self.id}, type={self.snapshot_type}, {self.year}-{self.month:02d}, item_id={self.item_id})>"

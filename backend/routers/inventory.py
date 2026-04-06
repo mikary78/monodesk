@@ -15,7 +15,9 @@ from schemas.inventory import (
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderResponse,
     ReceiveOrderRequest, InventorySummaryResponse,
     DailyPriceRecordCreate, DailyPriceRecordResponse,
-    DailyPriceGridResponse, DailyPriceSummaryResponse
+    DailyPriceGridResponse, DailyPriceSummaryResponse,
+    InventorySnapshotCreate, InventorySnapshotUpdate,
+    SnapshotSummaryResponse, SnapshotConfirmRequest,
 )
 import services.inventory_service as service
 
@@ -339,3 +341,93 @@ def toggle_price_tracking(item_id: int, db: Session = Depends(get_db)):
         "item_id": item_id,
         "is_daily_price_tracked": bool(result.is_daily_price_tracked)
     }
+
+
+# ─────────────────────────────────────────
+# 재고 스냅샷 API (월초/월말 재고)
+# 엔드포인트 등록 순서 주의:
+#   1. /snapshot/confirm        (POST, 고정 경로)
+#   2. /snapshot/generate/...   (POST, 고정 prefix)
+#   3. /snapshot/{type}/{y}/{m} (GET, 동적 경로)
+#   4. /snapshot/{id}           (PUT, 동적 경로 - GET과 메소드 다르므로 충돌 없음)
+# ─────────────────────────────────────────
+
+@router.post("/snapshot/confirm", response_model=SnapshotSummaryResponse)
+def confirm_snapshot(data: SnapshotConfirmRequest, db: Session = Depends(get_db)):
+    """
+    스냅샷 확정 처리.
+    확정 후 수정 불가. month_end 확정 시 다음달 month_start 자동 생성.
+    """
+    try:
+        return service.confirm_snapshot(db, data.snapshot_type, data.year, data.month)
+    except ValueError as e:
+        # 확정할 데이터 없음, 이미 확정됨 등 비즈니스 오류
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"확정 처리 중 오류: {str(e)}")
+
+
+@router.post(
+    "/snapshot/generate/{snapshot_type}/{year}/{month}",
+    response_model=SnapshotSummaryResponse
+)
+def generate_snapshot(
+    snapshot_type: str,
+    year: int,
+    month: int,
+    db: Session = Depends(get_db)
+):
+    """
+    현재 재고 기준으로 스냅샷 초안 자동 생성.
+    이미 확정된 스냅샷이 있으면 400 에러를 반환합니다.
+    """
+    try:
+        return service.generate_snapshot(db, snapshot_type, year, month)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"초안 생성 중 오류: {str(e)}")
+
+
+@router.get(
+    "/snapshot/{snapshot_type}/{year}/{month}",
+    response_model=SnapshotSummaryResponse
+)
+def get_snapshot(
+    snapshot_type: str,
+    year: int,
+    month: int,
+    db: Session = Depends(get_db)
+):
+    """
+    스냅샷 조회.
+    month_start이고 데이터가 없으면 직전달 month_end(확정)를 자동 복사 후 반환합니다.
+    """
+    try:
+        return service.get_snapshot(db, snapshot_type, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스냅샷 조회 중 오류: {str(e)}")
+
+
+@router.put("/snapshot/{snapshot_id}", response_model=SnapshotSummaryResponse)
+def update_snapshot_item(
+    snapshot_id: int,
+    data: InventorySnapshotUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    스냅샷 항목 수량/단가 수정 (확정 전만 가능).
+    수정 후 해당 스냅샷 전체 요약을 반환합니다.
+    """
+    try:
+        snap = service.update_snapshot_item(db, snapshot_id, data)
+        if not snap:
+            raise HTTPException(status_code=404, detail="스냅샷 항목을 찾을 수 없습니다.")
+        # 수정된 항목이 속한 스냅샷 전체 요약 반환
+        return service.get_snapshot(db, snap.snapshot_type, snap.year, snap.month)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"수정 중 오류: {str(e)}")

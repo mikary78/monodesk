@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Package, AlertTriangle, ShoppingCart, Truck,
-  RotateCcw, TrendingUp
+  RotateCcw, TrendingUp, Archive
 } from "lucide-react";
 import { fetchInventorySummary, seedInventoryCategories } from "../api/inventoryApi";
 import InventoryItemTab from "../components/modules/inventory/InventoryItemTab";
@@ -14,6 +14,8 @@ import PurchaseOrderTab from "../components/modules/inventory/PurchaseOrderTab";
 import AdjustmentHistoryTab from "../components/modules/inventory/AdjustmentHistoryTab";
 // 데일리 단가 그리드 컴포넌트
 import DailyPriceGrid from "../components/modules/inventory/DailyPriceGrid";
+// 월초/월말 재고 스냅샷 컴포넌트
+import InventorySnapshot from "../components/modules/inventory/InventorySnapshot";
 
 // ─────────────────────────────────────────
 // KPI 요약 카드 컴포넌트
@@ -80,6 +82,8 @@ const TAB_LIST = [
   { id: "orders",       label: "발주서",      icon: Truck },
   { id: "history",      label: "조정 이력",   icon: RotateCcw },
   { id: "daily-price",  label: "데일리 단가", icon: TrendingUp },
+  { id: "month-start",  label: "월초재고",    icon: Archive },
+  { id: "month-end",    label: "월말재고",    icon: Archive },
 ];
 
 // ─────────────────────────────────────────
@@ -231,6 +235,14 @@ const InventoryPage = () => {
           {/* 데일리 단가 탭 — 수산물 등 시가 품목 일별 단가 추적 */}
           {activeTab === "daily-price" && (
             <DailyPriceGrid />
+          )}
+          {/* 월초재고 / 월말재고 탭 — InventorySnapshot 컴포넌트가 year/month를 자체 관리 */}
+          {(activeTab === "month-start" || activeTab === "month-end") && (
+            <InventorySnapshot
+              snapshotType={activeTab === "month-start" ? "month_start" : "month_end"}
+              initialYear={new Date().getFullYear()}
+              initialMonth={new Date().getMonth() + 1}
+            />
           )}
         </div>
       </div>
