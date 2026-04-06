@@ -18,6 +18,7 @@ from schemas.inventory import (
     DailyPriceGridResponse, DailyPriceSummaryResponse,
     InventorySnapshotCreate, InventorySnapshotUpdate,
     SnapshotSummaryResponse, SnapshotConfirmRequest,
+    PurchaseSummaryResponse,  # 매입 출처별 집계 응답 스키마
 )
 import services.inventory_service as service
 
@@ -276,6 +277,30 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
     if not success:
         raise HTTPException(status_code=404, detail="해당 발주서를 찾을 수 없습니다.")
     return {"success": True, "message": "발주서가 삭제되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 매입 출처별 집계 API
+# 엑셀 3.원·부재료 시트의 구매 경로별 월별 합계를 반환합니다.
+# ─────────────────────────────────────────
+
+@router.get("/purchases/summary/{year}/{month}", response_model=PurchaseSummaryResponse)
+def get_purchase_summary(
+    year: int,   # 집계 연도 (예: 2026)
+    month: int,  # 집계 월 (예: 4)
+    db: Session = Depends(get_db)
+):
+    """
+    월별 매입 출처별 합계 조회.
+    본사구매(계좌이체) / 현장구매 법카 / 현장구매 시재 / 기타 별 금액 집계.
+    엑셀 ★보고서의 원재료 지출 집계와 동일한 결과를 반환합니다.
+
+    URL 예시: GET /api/inventory/purchases/summary/2026/4
+    """
+    try:
+        return service.get_purchase_summary(db, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"매입 집계 조회 중 오류: {str(e)}")
 
 
 # ─────────────────────────────────────────

@@ -156,3 +156,7 @@ class DashboardResponse(BaseModel):
 
     # 발주 현황
     order_status: OrderStatusKPI
+
+    # 이번 달 매입 출처별 합계 (선택적 — 미집계 시 None)
+    # 본사구매/현장구매(법카/시재)/기타 구분별 원재료 지출 총합
+    purchase_summary: Optional[dict] = None

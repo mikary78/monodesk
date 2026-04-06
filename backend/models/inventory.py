@@ -6,11 +6,32 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from enum import Enum
 from database import Base
 import datetime as dt_module
 
 # InventorySnapshot 모델에서 UNIQUE 제약 조건을 위해 UniqueConstraint 임포트
 from sqlalchemy import UniqueConstraint
+
+
+# ─────────────────────────────────────────
+# 매입 출처 Enum 정의
+# 엑셀 3.원·부재료 시트의 본사구매/현장구매 구분에 대응합니다.
+# ─────────────────────────────────────────
+
+class PurchaseSource(str, Enum):
+    """
+    매입 출처 구분 열거형.
+    재고 입고 시 어떤 경로로 구매했는지 기록합니다.
+    - HEADQUARTERS: 본사에서 계좌이체로 결제하는 구매
+    - SITE_CARD: 현장에서 법인카드로 결제하는 구매
+    - SITE_CASH: 현장에서 현금(시재)으로 결제하는 구매
+    - DIRECT: 기타 직접 구매
+    """
+    HEADQUARTERS = "headquarters"   # 본사구매 (계좌이체)
+    SITE_CARD = "site_card"         # 현장구매 법카
+    SITE_CASH = "site_cash"         # 현장구매 시재
+    DIRECT = "direct"               # 기타 직접구매
 
 
 class InventoryCategory(Base):
@@ -125,6 +146,11 @@ class InventoryAdjustment(Base):
     unit_price = Column(Float, nullable=True, comment="단가 (원)")
     # 메모 (사유, 특이사항)
     memo = Column(Text, nullable=True, comment="메모")
+    # 매입 출처: headquarters(본사)/site_card(법카)/site_cash(시재)/direct(기타)
+    # 엑셀 3.원·부재료 시트의 구매 경로 구분과 대응합니다
+    purchase_source = Column(String(20), default="direct", comment="매입 출처 (headquarters/site_card/site_cash/direct)")
+    # 연결 지출내역 ID (법카/시재 현장구매 시 expense_records.id 연결, 선택사항)
+    linked_expense_id = Column(Integer, nullable=True, comment="연결 지출내역 ID (expense_records.id)")
     # 소프트 삭제
     is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
     created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")

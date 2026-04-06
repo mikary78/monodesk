@@ -118,6 +118,11 @@ class InventoryAdjustmentBase(BaseModel):
     adjustment_date: str = Field(..., description="조정 날짜 (YYYY-MM-DD)")
     unit_price: Optional[float] = Field(None, ge=0, description="단가 (원)")
     memo: Optional[str] = None
+    # 매입 출처 (입고 시 구매 경로 구분)
+    # headquarters: 본사구매, site_card: 현장 법카, site_cash: 현장 시재, direct: 기타
+    purchase_source: Optional[str] = Field("direct", description="매입 출처 (headquarters/site_card/site_cash/direct)")
+    # 연결 지출내역 ID (현장구매 시 지출관리 기록과 연결)
+    linked_expense_id: Optional[int] = Field(None, description="연결 지출내역 ID (expense_records.id)")
 
     @field_validator("adjustment_type")
     @classmethod
@@ -140,12 +145,17 @@ class InventoryAdjustmentCreate(InventoryAdjustmentBase):
 
 
 class InventoryAdjustmentResponse(InventoryAdjustmentBase):
-    """재고 수량 조정 응답 스키마"""
+    """
+    재고 수량 조정 응답 스키마.
+    Base에 purchase_source, linked_expense_id가 포함되어 있으므로
+    from_attributes=True 설정으로 DB 모델에서 자동 반영됩니다.
+    """
     id: int
     quantity_before: float
     quantity_after: float
     purchase_order_id: Optional[int] = None
     created_at: datetime
+    # purchase_source, linked_expense_id는 Base에서 상속됩니다
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -250,10 +260,16 @@ class PurchaseOrderResponse(PurchaseOrderBase):
 # ─────────────────────────────────────────
 
 class ReceiveOrderItem(BaseModel):
-    """입고 처리 시 개별 품목의 실제 입고 수량"""
+    """
+    입고 처리 시 개별 품목의 실제 입고 수량.
+    발주서 단위로 동일한 매입 출처를 사용하지만,
+    스키마 수준에서도 품목별 출처 오버라이드를 허용합니다.
+    """
     order_item_id: int = Field(..., gt=0, description="발주 품목 ID")
     received_quantity: float = Field(..., ge=0, description="실제 입고 수량")
     unit_price: Optional[float] = Field(None, ge=0, description="실제 입고 단가 (원)")
+    # 해당 품목의 매입 출처 (발주서 전체 출처를 ReceiveOrderRequest에서 지정하고 여기서 전달)
+    purchase_source: Optional[str] = Field("direct", description="매입 출처 (headquarters/site_card/site_cash/direct)")
 
 
 class ReceiveOrderRequest(BaseModel):
@@ -464,3 +480,36 @@ class SnapshotSummaryResponse(BaseModel):
     categories: List[SnapshotCategoryGroup]
     # 전체 합계 금액 (원)
     grand_total: int
+# 매입 출처별 집계 스키마
+# 엑셀 3.원·부재료 시트의 구매 경로별 금액 집계에 대응합니다.
+# ─────────────────────────────────────────
+
+class PurchaseSourceTotal(BaseModel):
+    """
+    매입 출처별 금액 합계.
+    본사구매/현장구매(법카/시재)/기타 각각의 입고 금액 총합을 담습니다.
+    """
+    # 매입 출처 코드 (headquarters / site_card / site_cash / direct)
+    source: str
+    # 한국어 레이블 (화면 표시용)
+    source_label: str
+    # 해당 출처의 입고 금액 합계 (수량 × 단가)
+    total_amount: float
+    # 해당 출처의 입고 건수
+    count: int
+
+
+class PurchaseSummaryResponse(BaseModel):
+    """
+    월별 매입 출처별 집계 응답 스키마.
+    /api/inventory/purchases/summary/{year}/{month} 엔드포인트에서 반환합니다.
+    엑셀 ★보고서의 원재료 지출 집계와 동일한 결과를 반환합니다.
+    """
+    # 조회 연도
+    year: int
+    # 조회 월
+    month: int
+    # 모든 출처의 전체 합계 금액
+    grand_total: float
+    # 출처별 상세 목록 (headquarters, site_card, site_cash, direct 순)
+    sources: List[PurchaseSourceTotal]
