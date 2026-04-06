@@ -313,65 +313,82 @@ export function formatDate(dateStr) {
 
 // ─────────────────────────────────────────
 // 데일리 단가 API
+// 일별 식재료 단가 기록을 관리합니다.
 // ─────────────────────────────────────────
 
 /**
  * 월별 데일리 단가 그리드 조회.
- * is_daily_price_tracked=True 품목의 전체 그리드 반환.
- * @param {number} year - 연도
- * @param {number} month - 월
+ * 추적 중인 품목의 일별 단가 기록을 그리드 형태로 반환합니다.
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
  */
 export async function getDailyPriceGrid(year, month) {
   return request(`${BASE_URL}/daily-price/${year}/${month}`);
 }
 
 /**
- * 데일리 단가 기록 저장/업데이트 (UPSERT).
- * amount = quantity × unit_price 서버에서 자동 계산.
+ * 데일리 단가 저장 (upsert).
  * @param {object} data - { item_id, record_date, quantity, unit_price, vendor, memo }
  */
 export async function saveDailyPrice(data) {
   return request(`${BASE_URL}/daily-price`, {
     method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 월별 데일리 단가 요약 조회.
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ */
+export async function getDailyPriceSummary(year, month) {
+  return request(`${BASE_URL}/daily-price/summary/${year}/${month}`);
+}
+
+/**
+ * 품목 데일리 단가 추적 여부 토글.
+ * @param {number} itemId - 재고 품목 ID
+ * @param {boolean} isTracked - 추적 여부
+ */
+export async function togglePriceTracking(itemId, isTracked) {
+  return request(`${BASE_URL}/items/${itemId}/track`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_daily_price_tracked: isTracked }),
+  });
+}
 
 // ─────────────────────────────────────────
-// 재고 스냅샷 API (월초/월말 재고)
-// 엑셀 8-1.월초재고 / 8-2.월말재고 시트에 대응합니다.
+// 재고 스냅샷 API
+// 월초/월말 재고 스냅샷을 관리합니다.
 // ─────────────────────────────────────────
 
 /**
  * 재고 스냅샷 조회.
- * month_start(월초재고)이고 데이터가 없으면 서버에서 직전달 month_end를 자동 복사합니다.
- * @param {string} type - "month_start" | "month_end"
+ * @param {string} type - "month_start" 또는 "month_end"
  * @param {number} year - 조회 연도
  * @param {number} month - 조회 월
- * @returns {Promise<object>} SnapshotSummaryResponse (카테고리별 그룹 + 합계)
  */
 export async function getSnapshot(type, year, month) {
   return request(`${BASE_URL}/snapshot/${type}/${year}/${month}`);
 }
 
 /**
- * 스냅샷 확정 처리.
- * 확정 후에는 수정 불가. month_end 확정 시 다음달 month_start가 자동 생성됩니다.
- * @param {string} type - "month_start" | "month_end"
+ * 현재 재고 기반 스냅샷 초안 자동 생성.
+ * @param {string} type - "month_start" 또는 "month_end"
  * @param {number} year - 연도
  * @param {number} month - 월
- * @returns {Promise<object>} SnapshotSummaryResponse (확정 처리된 스냅샷)
  */
-export async function confirmSnapshot(type, year, month) {
-  return request(`${BASE_URL}/snapshot/confirm`, {
+export async function generateSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/generate/${type}/${year}/${month}`, {
     method: "POST",
-    body: JSON.stringify({ snapshot_type: type, year, month }),
   });
 }
 
 /**
- * 스냅샷 항목 수량/단가 수정 (확정 전만 가능).
- * amount(금액)는 서버에서 quantity × unit_price로 자동 재계산됩니다.
- * @param {number} id - 수정할 스냅샷 항목 ID
- * @param {object} data - { quantity, unit_price, memo }
- * @returns {Promise<object>} SnapshotSummaryResponse (수정 후 전체 스냅샷)
+ * 스냅샷 단건 항목 수정.
+ * @param {number} id - 스냅샷 항목 ID
+ * @param {object} data - { quantity, unit_price }
  */
 export async function updateSnapshotItem(id, data) {
   return request(`${BASE_URL}/snapshot/${id}`, {
@@ -381,33 +398,16 @@ export async function updateSnapshotItem(id, data) {
 }
 
 /**
- * 데일리 단가 월별 품목별 요약 조회.
- * 평균/최고/최저 단가 및 총 금액 포함.
+ * 스냅샷 확정 처리.
+ * 확정 후에는 편집이 불가합니다.
+ * month_end 확정 시 다음 달 month_start에 자동 반영됩니다.
+ * @param {string} type - "month_start" 또는 "month_end"
  * @param {number} year - 연도
  * @param {number} month - 월
  */
-export async function getDailyPriceSummary(year, month) {
-  return request(`${BASE_URL}/daily-price/summary/${year}/${month}`);
-}
-
-/**
- * 데일리 단가 추적 대상 토글 (ON/OFF).
- * is_daily_price_tracked 플래그를 반전시킵니다.
- * @param {number} itemId - 품목 ID
- */
-export async function togglePriceTracking(itemId) {
-  return request(`${BASE_URL}/items/${itemId}/track`, {
-    method: "PATCH",
- * 현재 재고 기준으로 스냅샷 초안 자동 생성.
- * inventory_items.current_quantity 값을 기준으로 스냅샷을 생성합니다.
- * 이미 확정된 스냅샷이 있으면 서버에서 400 에러를 반환합니다.
- * @param {string} type - "month_start" | "month_end"
- * @param {number} year - 연도
- * @param {number} month - 월
- * @returns {Promise<object>} SnapshotSummaryResponse (생성된 초안)
- */
-export async function generateSnapshot(type, year, month) {
-  return request(`${BASE_URL}/snapshot/generate/${type}/${year}/${month}`, {
+export async function confirmSnapshot(type, year, month) {
+  return request(`${BASE_URL}/snapshot/confirm`, {
     method: "POST",
+    body: JSON.stringify({ snapshot_type: type, year, month }),
   });
 }

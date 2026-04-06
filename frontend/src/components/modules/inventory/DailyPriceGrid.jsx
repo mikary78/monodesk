@@ -1,74 +1,301 @@
 // ============================================================
-// components/modules/inventory/DailyPriceGrid.jsx
-// 데일리 단가 그리드 컴포넌트
-// 엑셀과 유사한 행(품목)×열(날짜) 그리드로 일별 단가를 입력/조회합니다.
+// DailyPriceGrid.jsx — 데일리 단가 그리드 컴포넌트
+// 추적 중인 식재료 품목의 일별 단가를 그리드로 관리합니다.
 // ============================================================
 
-import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Settings, X, Save } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ChevronLeft, ChevronRight, Settings, X, Loader2, Plus } from "lucide-react";
 import {
   getDailyPriceGrid,
   saveDailyPrice,
   togglePriceTracking,
   fetchInventoryItems,
 } from "../../../api/inventoryApi";
-import { useToast } from "../../../contexts/ToastContext";
 
-// 요일 레이블 (0: 일요일 ~ 6: 토요일)
-const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+// ─────────────────────────────────────────
+// 단가 입력 팝오버 컴포넌트
+// ─────────────────────────────────────────
 
 /**
- * 금액을 천 단위 구분 문자열로 포맷합니다.
- * 0이거나 falsy이면 빈 문자열을 반환합니다.
- * @param {number} n - 금액
- * @returns {string} 포맷된 금액 문자열
+ * 셀 클릭 시 표시되는 단가 입력 팝오버.
+ * @param {object} props
+ * @param {object} props.cell - { itemId, itemName, unit, date, record }
+ * @param {function} props.onSave - 저장 핸들러 (data) => void
+ * @param {function} props.onClose - 닫기 핸들러
  */
-const formatAmount = (n) => {
-  if (!n || n === 0) return "";
-  return Number(n).toLocaleString("ko-KR");
+const PricePopover = ({ cell, onSave, onClose }) => {
+  const ref = useRef(null);
+
+  // 입력 폼 상태 (기존 기록이 있으면 초기값으로 설정)
+  const [form, setForm] = useState({
+    quantity: cell.record?.quantity ?? "",
+    unit_price: cell.record?.unit_price ?? "",
+    vendor: cell.record?.vendor ?? "",
+    memo: cell.record?.memo ?? "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  // 팝오버 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  /** 폼 저장 처리 */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.quantity || !form.unit_price) return;
+    setSaving(true);
+    try {
+      await onSave({
+        item_id: cell.itemId,
+        record_date: cell.date,
+        quantity: parseFloat(form.quantity),
+        unit_price: parseFloat(form.unit_price),
+        vendor: form.vendor || null,
+        memo: form.memo || null,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 날짜 표시 형식 변환 (YYYY-MM-DD → M/D)
+  const displayDate = cell.date
+    ? `${parseInt(cell.date.split("-")[1])}/${parseInt(cell.date.split("-")[2])}`
+    : "";
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50 top-full left-0 mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-xl p-3"
+    >
+      {/* 팝오버 헤더 */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-slate-700">
+          {cell.itemName} — {displayDate}
+        </span>
+        <button onClick={onClose} className="text-slate-300 hover:text-slate-500">
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* 입력 폼 */}
+      <form onSubmit={handleSubmit} className="space-y-2">
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="text-[10px] text-slate-400 block mb-0.5">수량 ({cell.unit})</label>
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              value={form.quantity}
+              onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+              className="w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+              placeholder="0"
+              required
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-[10px] text-slate-400 block mb-0.5">단가 (원)</label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              value={form.unit_price}
+              onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
+              className="w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+              placeholder="0"
+              required
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] text-slate-400 block mb-0.5">거래처</label>
+          <input
+            type="text"
+            value={form.vendor}
+            onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))}
+            className="w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+            placeholder="거래처명"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-slate-400 block mb-0.5">메모</label>
+          <input
+            type="text"
+            value={form.memo}
+            onChange={(e) => setForm((f) => ({ ...f, memo: e.target.value }))}
+            className="w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-400"
+            placeholder="메모"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={saving}
+          className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-medium py-1.5 rounded transition-colors"
+        >
+          {saving ? "저장 중..." : "저장"}
+        </button>
+      </form>
+    </div>
+  );
 };
 
 // ─────────────────────────────────────────
-// DailyPriceGrid 메인 컴포넌트
+// 추적 품목 설정 모달 컴포넌트
 // ─────────────────────────────────────────
 
+/**
+ * 데일리 단가 추적 품목을 설정하는 모달.
+ * @param {object} props
+ * @param {function} props.onClose - 모달 닫기 핸들러
+ * @param {function} props.onSaved - 저장 완료 후 콜백
+ */
+const TrackingModal = ({ onClose, onSaved }) => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState({}); // { itemId: boolean }
+
+  // 전체 재고 품목 로드
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await fetchInventoryItems({ limit: 1000 });
+        setItems(data.items || data);
+      } catch {
+        // 로드 실패 시 빈 목록 유지
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  /** 추적 여부 토글 처리 */
+  const handleToggle = async (item) => {
+    setSaving((prev) => ({ ...prev, [item.id]: true }));
+    try {
+      await togglePriceTracking(item.id, !item.is_daily_price_tracked);
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === item.id ? { ...i, is_daily_price_tracked: !i.is_daily_price_tracked } : i
+        )
+      );
+    } catch (err) {
+      alert(err.message || "추적 설정 변경에 실패했습니다.");
+    } finally {
+      setSaving((prev) => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+        {/* 모달 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-800">데일리 단가 추적 품목 설정</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* 품목 목록 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-slate-400">
+              <Loader2 size={18} className="animate-spin mr-2" />
+              품목 로딩 중...
+            </div>
+          ) : items.length === 0 ? (
+            <p className="text-center text-sm text-slate-400 py-10">등록된 품목이 없습니다.</p>
+          ) : (
+            items.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-50"
+              >
+                <div>
+                  <span className="text-sm font-medium text-slate-700">{item.name || item.item_name}</span>
+                  <span className="text-xs text-slate-400 ml-2">{item.unit}</span>
+                </div>
+                <button
+                  onClick={() => handleToggle(item)}
+                  disabled={saving[item.id]}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    item.is_daily_price_tracked ? "bg-blue-500" : "bg-slate-200"
+                  } disabled:opacity-50`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                      item.is_daily_price_tracked ? "left-5" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* 모달 푸터 */}
+        <div className="px-5 py-3 border-t border-slate-100 flex justify-end">
+          <button
+            onClick={() => { onSaved(); onClose(); }}
+            className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            완료
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────
+// 메인 컴포넌트
+// ─────────────────────────────────────────
+
+/**
+ * 데일리 단가 그리드 컴포넌트.
+ * Props 없음 — 내부에서 year/month 상태를 직접 관리합니다.
+ */
 const DailyPriceGrid = () => {
-  const toast = useToast();
   const today = new Date();
 
-  // 연도/월 네비게이션 상태
+  // 연/월 상태
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
-  // 그리드 데이터 (백엔드 응답 전체)
+  // 그리드 데이터 상태
   const [gridData, setGridData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // 팝오버 상태 — 클릭된 셀 정보 { itemId, dateStr }
-  const [popover, setPopover] = useState(null);
+  // 열린 팝오버 셀 정보
+  const [openPopover, setOpenPopover] = useState(null); // { itemId, itemName, unit, date, record }
 
-  // 팝오버 내 입력값
-  const [popInput, setPopInput] = useState({ quantity: "", unit_price: "", vendor: "" });
+  // 추적 설정 모달 표시 여부
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
 
-  // 저장 처리 중 여부
-  const [saving, setSaving] = useState(false);
+  // 현재 달 여부 (다음 달 이동 비활성화용)
+  const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
 
-  // 추적 품목 설정 모달 표시 여부
-  const [showTrackModal, setShowTrackModal] = useState(false);
-
-  // 추적 설정 모달에서 사용할 전체 품목 목록
-  const [allItems, setAllItems] = useState([]);
-  const [trackLoading, setTrackLoading] = useState(false);
-
-  // ─── 그리드 데이터 로드 ───────────────────
+  // ─────────────────────────────────────────
+  // 데이터 로드
+  // ─────────────────────────────────────────
 
   const loadGrid = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await getDailyPriceGrid(year, month);
       setGridData(data);
     } catch (err) {
-      toast.error(`데이터 로드 실패: ${err.message}`);
+      setError(err.message || "데이터를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -78,165 +305,81 @@ const DailyPriceGrid = () => {
     loadGrid();
   }, [loadGrid]);
 
-  // ─── 월 네비게이션 ────────────────────────
+  // ─────────────────────────────────────────
+  // 월 네비게이터 핸들러
+  // ─────────────────────────────────────────
 
   const handlePrevMonth = () => {
-    if (month === 1) {
-      setYear((y) => y - 1);
-      setMonth(12);
-    } else {
-      setMonth((m) => m - 1);
-    }
+    if (month === 1) { setYear((y) => y - 1); setMonth(12); }
+    else setMonth((m) => m - 1);
   };
 
   const handleNextMonth = () => {
-    // 현재 월 이후로는 이동 불가
-    const isCurrentMonth =
-      year === today.getFullYear() && month === today.getMonth() + 1;
     if (isCurrentMonth) return;
-    if (month === 12) {
-      setYear((y) => y + 1);
-      setMonth(1);
-    } else {
-      setMonth((m) => m + 1);
-    }
+    if (month === 12) { setYear((y) => y + 1); setMonth(1); }
+    else setMonth((m) => m + 1);
   };
 
-  // ─── 셀 클릭 → 팝오버 열기 ───────────────
+  // ─────────────────────────────────────────
+  // 단가 저장 핸들러
+  // ─────────────────────────────────────────
 
-  const handleCellClick = (itemId, dateStr, existingRecord) => {
-    setPopover({ itemId, dateStr });
-    setPopInput({
-      quantity: existingRecord?.quantity ?? "",
-      unit_price: existingRecord?.unit_price ?? "",
-      vendor: existingRecord?.vendor ?? "",
-    });
+  const handleSavePrice = async (data) => {
+    await saveDailyPrice(data);
+    await loadGrid(); // 저장 후 그리드 새로고침
   };
 
-  // ─── 팝오버 저장 ─────────────────────────
-
-  const handlePopoverSave = async () => {
-    if (!popover) return;
-    try {
-      setSaving(true);
-      await saveDailyPrice({
-        item_id: popover.itemId,
-        record_date: popover.dateStr,
-        quantity: parseFloat(popInput.quantity) || 0,
-        unit_price: parseInt(popInput.unit_price) || 0,
-        vendor: popInput.vendor || null,
-      });
-      setPopover(null);
-      await loadGrid();
-    } catch (err) {
-      toast.error(`저장 실패: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // ─── 추적 품목 설정 모달 열기 ─────────────
-
-  const handleOpenTrackModal = async () => {
-    setShowTrackModal(true);
-    setTrackLoading(true);
-    try {
-      // inventoryApi.fetchInventoryItems는 filters 객체를 받습니다
-      const data = await fetchInventoryItems({ limit: 200 });
-      setAllItems(data.items || []);
-    } catch (err) {
-      toast.error("품목 목록 로드 실패");
-    } finally {
-      setTrackLoading(false);
-    }
-  };
-
-  // ─── 추적 토글 ───────────────────────────
-
-  const handleToggleTrack = async (itemId) => {
-    try {
-      await togglePriceTracking(itemId);
-      // 모달 목록 갱신
-      const data = await fetchInventoryItems({ limit: 200 });
-      setAllItems(data.items || []);
-      // 그리드도 갱신
-      await loadGrid();
-    } catch (err) {
-      toast.error("토글 실패");
-    }
-  };
-
-  // ─── 단가 등락 색상 계산 ──────────────────
+  // ─────────────────────────────────────────
+  // 단가 색상 계산 (전일 대비)
+  // ─────────────────────────────────────────
 
   /**
-   * 해당 셀의 unit_price와 직전 기록의 unit_price를 비교하여 색상 클래스를 반환합니다.
-   * 직전 기록: 현재 날짜 이전에서 가장 가까운 날짜의 기록을 탐색합니다.
-   * @param {object} item - 그리드 품목 행 데이터
-   * @param {string} dateStr - 현재 셀 날짜 (YYYY-MM-DD)
-   * @param {number} currentPrice - 현재 단가
-   * @returns {string} Tailwind 색상 클래스
+   * 전일 단가 대비 오늘 단가의 색상 클래스를 반환합니다.
+   * @param {Array} records - 품목의 전체 기록 배열 (날짜순 정렬 가정)
+   * @param {string} date - 현재 날짜
+   * @returns {string} Tailwind text 색상 클래스
    */
-  const getPriceChangeColor = (item, dateStr, currentPrice) => {
-    if (!currentPrice || !gridData) return "text-slate-700";
-    const yearMonth = `${year.toString().padStart(4, "0")}-${month
-      .toString()
-      .padStart(2, "0")}`;
-    const day = parseInt(dateStr.split("-")[2]);
-    // 현재 날짜 이전 날짜들을 역순으로 탐색하여 직전 기록 찾기
-    for (let d = day - 1; d >= 1; d--) {
-      const prevDate = `${yearMonth}-${d.toString().padStart(2, "0")}`;
-      const prevRecord = item.records[prevDate];
-      if (prevRecord && prevRecord.unit_price > 0) {
-        if (currentPrice > prevRecord.unit_price) return "text-red-500";   // 상승
-        if (currentPrice < prevRecord.unit_price) return "text-blue-500";  // 하락
-        return "text-slate-700";                                            // 동일
-      }
+  const getPriceColorClass = (records, date, days) => {
+    const dayIndex = days.indexOf(date);
+    if (dayIndex <= 0) return "text-slate-700"; // 첫날은 기본색
+
+    // 이전 날짜들 중 가장 최근 기록을 찾음
+    let prevRecord = null;
+    for (let i = dayIndex - 1; i >= 0; i--) {
+      const prevRec = records.find((r) => r.date === days[i]);
+      if (prevRec && prevRec.unit_price) { prevRecord = prevRec; break; }
     }
-    return "text-slate-700"; // 직전 기록 없으면 기본 색상
+
+    const curRecord = records.find((r) => r.date === date);
+    if (!curRecord || !curRecord.unit_price || !prevRecord) return "text-slate-700";
+
+    if (curRecord.unit_price > prevRecord.unit_price) return "text-red-600";
+    if (curRecord.unit_price < prevRecord.unit_price) return "text-blue-600";
+    return "text-slate-700";
   };
 
-  // ─── 로딩 상태 ───────────────────────────
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-slate-400 text-sm">데이터를 불러오는 중...</div>
-      </div>
-    );
-  }
-
-  const daysInMonth = gridData?.days_in_month || 30;
-  // 1일부터 말일까지 날짜 배열 생성
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const isCurrentMonth =
-    year === today.getFullYear() && month === today.getMonth() + 1;
-
-  // ─── 렌더링 ──────────────────────────────
+  // ─────────────────────────────────────────
+  // 렌더링
+  // ─────────────────────────────────────────
 
   return (
     <div className="space-y-4">
-
-      {/* 헤더: 월 선택 네비게이터 + 추적 품목 설정 버튼 */}
+      {/* 상단 헤더: 월 네비게이터 + 추적 설정 버튼 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {/* 이전 달 버튼 */}
           <button
             onClick={handlePrevMonth}
-            className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-white"
+            className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded-md hover:bg-white"
           >
             <ChevronLeft size={15} className="text-slate-500" />
           </button>
-
-          {/* 연도/월 표시 */}
-          <div className="h-8 px-4 flex items-center border border-slate-200 rounded bg-white text-sm font-semibold text-slate-900 min-w-[110px] justify-center">
+          <div className="h-8 px-4 flex items-center border border-slate-200 rounded-md bg-white text-sm font-semibold text-slate-800 min-w-[110px] justify-center">
             {year}년 {month}월
           </div>
-
-          {/* 다음 달 버튼 (현재 월이면 비활성화) */}
           <button
             onClick={handleNextMonth}
             disabled={isCurrentMonth}
-            className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded hover:bg-white disabled:opacity-30"
+            className="h-8 w-8 flex items-center justify-center border border-slate-200 rounded-md hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ChevronRight size={15} className="text-slate-500" />
           </button>
@@ -244,331 +387,183 @@ const DailyPriceGrid = () => {
 
         {/* 추적 품목 설정 버튼 */}
         <button
-          onClick={handleOpenTrackModal}
-          className="flex items-center gap-2 h-8 px-3 text-sm border border-slate-200 rounded hover:bg-white text-slate-600"
+          onClick={() => setShowTrackingModal(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-white transition-colors"
         >
-          <Settings size={14} />
+          <Settings size={13} />
           추적 품목 설정
         </button>
       </div>
 
-      {/* 추적 품목이 없을 때 안내 메시지 */}
-      {(!gridData?.items || gridData.items.length === 0) && (
-        <div className="bg-slate-50 rounded-lg p-8 text-center">
-          <p className="text-slate-500 text-sm mb-2">추적 대상 품목이 없습니다.</p>
-          <p className="text-slate-400 text-xs">
-            오른쪽 상단 "추적 품목 설정" 버튼으로 단가를 추적할 품목을 추가해주세요.
-          </p>
-        </div>
-      )}
+      {/* 그리드 컨테이너 */}
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-slate-400">
+            <Loader2 size={20} className="animate-spin mr-2" />
+            데이터 로딩 중...
+          </div>
+        ) : error ? (
+          <div className="text-center py-16 text-red-500 text-sm">{error}</div>
+        ) : !gridData || !gridData.items || gridData.items.length === 0 ? (
+          <div className="text-center py-16 text-slate-400">
+            <p className="text-sm font-medium mb-2">추적 중인 품목이 없습니다.</p>
+            <p className="text-xs">상단의 "추적 품목 설정"에서 단가를 추적할 품목을 선택하세요.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  {/* 품목명 고정 열 */}
+                  <th className="sticky left-0 z-10 bg-slate-50 text-left px-4 py-3 font-semibold text-slate-600 min-w-[130px] border-r border-slate-200">
+                    품목 (단위)
+                  </th>
+                  {/* 날짜 열 */}
+                  {gridData.days.map((day) => {
+                    const d = new Date(day);
+                    const dow = d.getDay();
+                    const isWeekend = dow === 0 || dow === 6;
+                    const DOW_KR = ["일", "월", "화", "수", "목", "금", "토"];
+                    return (
+                      <th
+                        key={day}
+                        className={`text-center px-1 py-2 font-medium min-w-[50px] ${
+                          isWeekend ? "text-red-400" : "text-slate-500"
+                        }`}
+                      >
+                        <div>{parseInt(day.split("-")[2])}</div>
+                        <div className="text-[10px] opacity-60">{DOW_KR[dow]}</div>
+                      </th>
+                    );
+                  })}
+                  {/* 합계 열 */}
+                  <th className="text-center px-3 py-3 font-semibold text-slate-600 min-w-[80px] border-l border-slate-200 bg-slate-50">
+                    월 합계
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {gridData.items.map((item) => {
+                  // records를 날짜 키로 인덱싱
+                  const recordMap = {};
+                  item.records.forEach((rec) => { recordMap[rec.date] = rec; });
 
-      {/* 그리드 테이블 — 가로 스크롤 지원 */}
-      {gridData?.items && gridData.items.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <table
-            className="text-xs border-collapse"
-            style={{ minWidth: `${80 + daysInMonth * 64 + 80}px` }}
-          >
-            <thead>
-              {/* 날짜 헤더 행 */}
-              <tr className="bg-slate-50">
-                {/* 품목 컬럼 헤더 (왼쪽 고정) */}
-                <th className="sticky left-0 z-10 bg-slate-50 border-b border-r border-slate-200 px-3 py-2 text-left font-semibold text-slate-700 w-20">
-                  품목
-                </th>
+                  // 월 합계 계산
+                  const monthTotal = item.records.reduce(
+                    (sum, rec) => sum + (rec.amount || 0), 0
+                  );
 
-                {/* 날짜별 헤더 셀 */}
-                {days.map((d) => {
-                  const dateStr = `${year.toString().padStart(4, "0")}-${month
-                    .toString()
-                    .padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
-                  const dow = new Date(year, month - 1, d).getDay();
                   return (
-                    <th
-                      key={d}
-                      className={`border-b border-r border-slate-200 px-1 py-1.5 text-center w-16 font-medium ${
-                        dow === 0
-                          ? "text-red-400"    // 일요일 = 빨강
-                          : dow === 6
-                          ? "text-blue-400"   // 토요일 = 파랑
-                          : "text-slate-600"  // 평일 = 기본
-                      }`}
-                    >
-                      <div>{d}</div>
-                      <div className="text-slate-400 font-normal">{DAY_LABELS[dow]}</div>
-                    </th>
+                    <tr key={item.item_id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                      {/* 품목명 + 단위 */}
+                      <td className="sticky left-0 z-10 bg-white border-r border-slate-100 px-4 py-2 hover:bg-slate-50/50">
+                        <div className="font-medium text-slate-700">{item.item_name}</div>
+                        <div className="text-[10px] text-slate-400">{item.unit}</div>
+                      </td>
+
+                      {/* 날짜별 단가 셀 */}
+                      {gridData.days.map((day) => {
+                        const rec = recordMap[day] || null;
+                        const colorClass = getPriceColorClass(item.records, day, gridData.days);
+                        const isOpen =
+                          openPopover?.itemId === item.item_id &&
+                          openPopover?.date === day;
+
+                        return (
+                          <td key={day} className="text-center px-1 py-1.5 relative">
+                            <button
+                              onClick={() =>
+                                setOpenPopover(
+                                  isOpen
+                                    ? null
+                                    : {
+                                        itemId: item.item_id,
+                                        itemName: item.item_name,
+                                        unit: item.unit,
+                                        date: day,
+                                        record: rec,
+                                      }
+                                )
+                              }
+                              className={`w-full rounded px-1 py-1 text-[11px] hover:bg-slate-100 transition-colors min-h-[32px] flex flex-col items-center justify-center ${colorClass}`}
+                            >
+                              {rec ? (
+                                <>
+                                  <span className="font-semibold">
+                                    {rec.unit_price?.toLocaleString()}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400">
+                                    {rec.quantity}{item.unit}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-slate-200">
+                                  <Plus size={10} />
+                                </span>
+                              )}
+                            </button>
+
+                            {/* 단가 입력 팝오버 */}
+                            {isOpen && (
+                              <PricePopover
+                                cell={openPopover}
+                                onSave={handleSavePrice}
+                                onClose={() => setOpenPopover(null)}
+                              />
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* 품목별 월 합계 */}
+                      <td className="text-right px-3 py-2 border-l border-slate-100 font-semibold text-slate-700">
+                        {monthTotal > 0 ? monthTotal.toLocaleString() + "원" : "-"}
+                      </td>
+                    </tr>
                   );
                 })}
 
-                {/* 월합계 컬럼 헤더 */}
-                <th className="border-b border-slate-200 px-3 py-2 text-center font-semibold text-slate-700 w-20">
-                  월합계
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {/* 품목별 데이터 행 */}
-              {gridData.items.map((item) => (
-                <tr key={item.item_id} className="hover:bg-slate-50/50">
-                  {/* 품목명 (왼쪽 고정, 단위 포함) */}
-                  <td className="sticky left-0 z-10 bg-white border-b border-r border-slate-200 px-3 py-2 font-medium text-slate-800">
-                    <div>{item.item_name}</div>
-                    <div className="text-slate-400 font-normal">{item.unit}</div>
+                {/* 하단: 날짜별 일별 합계 행 */}
+                <tr className="bg-slate-50 border-t border-slate-200 font-semibold">
+                  <td className="sticky left-0 z-10 bg-slate-50 border-r border-slate-200 px-4 py-2 text-slate-600">
+                    일별 합계
                   </td>
-
-                  {/* 날짜별 데이터 셀 */}
-                  {days.map((d) => {
-                    const dateStr = `${year.toString().padStart(4, "0")}-${month
-                      .toString()
-                      .padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
-                    const rec = item.records[dateStr];
-                    const isOpen =
-                      popover?.itemId === item.item_id &&
-                      popover?.dateStr === dateStr;
-                    const priceColor =
-                      rec?.unit_price
-                        ? getPriceChangeColor(item, dateStr, rec.unit_price)
-                        : "";
-
+                  {gridData.days.map((day) => {
+                    // 해당 날짜의 모든 품목 금액 합산
+                    const dayTotal = gridData.items.reduce((sum, item) => {
+                      const rec = item.records.find((r) => r.date === day);
+                      return sum + (rec?.amount || 0);
+                    }, 0);
                     return (
-                      <td
-                        key={d}
-                        className={`border-b border-r border-slate-200 px-1 py-1 text-center cursor-pointer relative ${
-                          isOpen
-                            ? "bg-blue-50"            // 팝오버 열린 셀
-                            : rec
-                            ? "bg-green-50/30 hover:bg-green-50"  // 기록 있는 셀
-                            : "hover:bg-slate-50"     // 빈 셀
-                        }`}
-                        onClick={() => handleCellClick(item.item_id, dateStr, rec)}
-                      >
-                        {rec ? (
-                          // 기록 있는 셀: 단가 + 수량 표시
-                          <div>
-                            <div className={`font-semibold ${priceColor}`}>
-                              {formatAmount(rec.unit_price)}
-                            </div>
-                            {rec.quantity > 0 && (
-                              <div className="text-slate-400">{rec.quantity}</div>
-                            )}
-                          </div>
-                        ) : (
-                          // 기록 없는 셀: 회색 대시 표시
-                          <div className="text-slate-200">-</div>
-                        )}
+                      <td key={day} className="text-center px-1 py-2 text-slate-600 text-[11px]">
+                        {dayTotal > 0 ? dayTotal.toLocaleString() : "-"}
                       </td>
                     );
                   })}
-
-                  {/* 월합계 셀 */}
-                  <td className="border-b border-slate-200 px-3 py-2 text-right font-semibold text-slate-800">
-                    {formatAmount(item.monthly_total)}
+                  {/* 전체 합계 */}
+                  <td className="text-right px-3 py-2 border-l border-slate-200 text-slate-800">
+                    {gridData.items
+                      .reduce(
+                        (sum, item) =>
+                          sum + item.records.reduce((s, r) => s + (r.amount || 0), 0),
+                        0
+                      )
+                      .toLocaleString()}
+                    원
                   </td>
                 </tr>
-              ))}
-
-              {/* 하단 일계(날짜별 합계) 행 */}
-              <tr className="bg-slate-50 font-semibold">
-                <td className="sticky left-0 z-10 bg-slate-50 border-t border-r border-slate-200 px-3 py-2 text-slate-700">
-                  일계
-                </td>
-                {days.map((d) => {
-                  const dateStr = `${year.toString().padStart(4, "0")}-${month
-                    .toString()
-                    .padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
-                  const total = gridData.daily_totals[dateStr] || 0;
-                  return (
-                    <td
-                      key={d}
-                      className="border-t border-r border-slate-200 px-1 py-2 text-center text-slate-700"
-                    >
-                      {total > 0 ? formatAmount(total) : ""}
-                    </td>
-                  );
-                })}
-                {/* 월 전체 합계 */}
-                <td className="border-t border-slate-200 px-3 py-2 text-right text-slate-900">
-                  {formatAmount(
-                    Object.values(gridData.daily_totals).reduce(
-                      (a, b) => a + b,
-                      0
-                    )
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ─── 단가 입력 팝오버 ─────────────────────────────────── */}
-      {popover && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/20"
-          onClick={() => setPopover(null)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-xl p-5 w-72 space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 팝오버 헤더 */}
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900">
-                단가 입력 — {popover.dateStr}
-              </h3>
-              <button
-                onClick={() => setPopover(null)}
-                className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100"
-              >
-                <X size={15} className="text-slate-400" />
-              </button>
-            </div>
-
-            {/* 수량 입력 */}
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">수량</label>
-              <input
-                type="number"
-                step="0.1"
-                value={popInput.quantity}
-                onChange={(e) =>
-                  setPopInput((p) => ({ ...p, quantity: e.target.value }))
-                }
-                placeholder="0"
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 단가 입력 */}
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">단가 (원)</label>
-              <input
-                type="number"
-                value={popInput.unit_price}
-                onChange={(e) =>
-                  setPopInput((p) => ({ ...p, unit_price: e.target.value }))
-                }
-                placeholder="0"
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 금액 자동 계산 표시 */}
-            {popInput.quantity && popInput.unit_price && (
-              <div className="text-xs text-slate-500 text-right">
-                금액:{" "}
-                <strong>
-                  {formatAmount(
-                    Math.round(
-                      parseFloat(popInput.quantity || 0) *
-                        parseInt(popInput.unit_price || 0)
-                    )
-                  )}
-                  원
-                </strong>
-              </div>
-            )}
-
-            {/* 구매처 입력 (선택) */}
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">구매처</label>
-              <input
-                type="text"
-                value={popInput.vendor}
-                onChange={(e) =>
-                  setPopInput((p) => ({ ...p, vendor: e.target.value }))
-                }
-                placeholder="거래처명 (선택)"
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* 취소 / 저장 버튼 */}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => setPopover(null)}
-                className="flex-1 h-9 text-sm border border-slate-200 rounded-md hover:bg-slate-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handlePopoverSave}
-                disabled={saving}
-                className="flex-1 flex items-center justify-center gap-1.5 h-9 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 disabled:opacity-50"
-              >
-                <Save size={14} />
-                {saving ? "저장 중..." : "저장"}
-              </button>
-            </div>
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* ─── 추적 품목 설정 모달 ────────────────────────────────── */}
-      {showTrackModal && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/30"
-          onClick={() => setShowTrackModal(false)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 모달 헤더 */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <h3 className="text-base font-semibold text-slate-900">
-                데일리 단가 추적 품목 설정
-              </h3>
-              <button
-                onClick={() => setShowTrackModal(false)}
-                className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-100"
-              >
-                <X size={16} className="text-slate-400" />
-              </button>
-            </div>
-
-            {/* 모달 콘텐츠 — 스크롤 가능 */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-2">
-              {trackLoading ? (
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  불러오는 중...
-                </div>
-              ) : allItems.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  등록된 품목이 없습니다.
-                </div>
-              ) : (
-                allItems
-                  .filter((i) => !i.is_deleted)
-                  .map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50"
-                    >
-                      <div>
-                        <div className="text-sm font-medium text-slate-800">
-                          {item.name}
-                        </div>
-                        <div className="text-xs text-slate-400">{item.unit}</div>
-                      </div>
-                      {/* 추적 토글 버튼 */}
-                      <button
-                        onClick={() => handleToggleTrack(item.id)}
-                        className={`h-7 px-3 text-xs font-medium rounded-full border transition-colors ${
-                          item.is_daily_price_tracked
-                            ? "bg-blue-500 text-white border-blue-500 hover:bg-blue-600"
-                            : "bg-white text-slate-500 border-slate-300 hover:border-blue-400 hover:text-blue-500"
-                        }`}
-                      >
-                        {item.is_daily_price_tracked ? "추적 중" : "추적 안함"}
-                      </button>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-        </div>
+      {/* 추적 품목 설정 모달 */}
+      {showTrackingModal && (
+        <TrackingModal
+          onClose={() => setShowTrackingModal(false)}
+          onSaved={loadGrid}
+        />
       )}
     </div>
   );

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Package, AlertTriangle, ShoppingCart, Truck,
-  RotateCcw, TrendingUp, Archive
+  RotateCcw, BarChart2, Archive
 } from "lucide-react";
 import { fetchInventorySummary, seedInventoryCategories } from "../api/inventoryApi";
 import InventoryItemTab from "../components/modules/inventory/InventoryItemTab";
@@ -78,12 +78,12 @@ const LowStockBanner = ({ items, onDismiss }) => {
 // ─────────────────────────────────────────
 
 const TAB_LIST = [
-  { id: "items",        label: "재고 품목",   icon: Package },
-  { id: "orders",       label: "발주서",      icon: Truck },
-  { id: "history",      label: "조정 이력",   icon: RotateCcw },
-  { id: "daily-price",  label: "데일리 단가", icon: TrendingUp },
-  { id: "month-start",  label: "월초재고",    icon: Archive },
-  { id: "month-end",    label: "월말재고",    icon: Archive },
+  { id: "items",          label: "재고 품목",   icon: Package   },
+  { id: "orders",         label: "발주서",      icon: Truck     },
+  { id: "history",        label: "조정 이력",   icon: RotateCcw },
+  { id: "daily-price",    label: "데일리 단가", icon: BarChart2 },
+  { id: "snapshot-start", label: "월초재고",    icon: Archive   },
+  { id: "snapshot-end",   label: "월말재고",    icon: Archive   },
 ];
 
 // ─────────────────────────────────────────
@@ -236,13 +236,13 @@ const InventoryPage = () => {
           {activeTab === "daily-price" && (
             <DailyPriceGrid />
           )}
-          {/* 월초재고 / 월말재고 탭 — InventorySnapshot 컴포넌트가 year/month를 자체 관리 */}
-          {(activeTab === "month-start" || activeTab === "month-end") && (
-            <InventorySnapshot
-              snapshotType={activeTab === "month-start" ? "month_start" : "month_end"}
-              initialYear={new Date().getFullYear()}
-              initialMonth={new Date().getMonth() + 1}
-            />
+          {/* 월초재고 스냅샷 탭 */}
+          {activeTab === "snapshot-start" && (
+            <InventorySnapshot snapshotType="month_start" />
+          )}
+          {/* 월말재고 스냅샷 탭 */}
+          {activeTab === "snapshot-end" && (
+            <InventorySnapshot snapshotType="month_end" />
           )}
         </div>
       </div>

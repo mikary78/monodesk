@@ -1,21 +1,21 @@
 // ============================================================
 // EmployeePage.jsx — 직원 관리 메인 페이지
-// 4개 탭: 직원 목록 / 출퇴근 관리 / 근무표 달력 / 급여 정산
+// 4개 탭: 직원 목록 / 출퇴근 관리 / 급여 정산 / 근무표 달력
 // ============================================================
 
 import { useState } from "react";
 import { Users, ChevronLeft, ChevronRight, UserCheck, Clock, DollarSign, Calendar } from "lucide-react";
 import EmployeeList from "../components/modules/employee/EmployeeList";
 import AttendanceList from "../components/modules/employee/AttendanceList";
-import AttendanceCalendar from "../components/modules/employee/AttendanceCalendar";
 import SalaryPanel from "../components/modules/employee/SalaryPanel";
+import AttendanceCalendar from "../components/modules/employee/AttendanceCalendar";
 
 // 탭 메뉴 정의
 const TABS = [
-  { id: "employees",           label: "직원 목록",    Icon: UserCheck },
-  { id: "attendance",          label: "출퇴근 관리",   Icon: Clock },
-  { id: "attendance-calendar", label: "근무표 달력",   Icon: Calendar },
-  { id: "salary",              label: "급여 정산",    Icon: DollarSign },
+  { id: "employees",  label: "직원 목록",   Icon: UserCheck },
+  { id: "attendance", label: "출퇴근 관리", Icon: Clock },
+  { id: "salary",     label: "급여 정산",   Icon: DollarSign },
+  { id: "calendar",   label: "근무표 달력", Icon: Calendar },
 ];
 
 const EmployeePage = () => {
@@ -57,7 +57,7 @@ const EmployeePage = () => {
   // 현재 달 여부 (다음 달 이동 비활성화용)
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1;
 
-  // 직원 목록 탭은 월 선택 불필요, 출퇴근/달력/급여 탭은 월 선택 필요
+  // 직원 목록 탭은 월 선택 불필요
   const showMonthSelector = activeTab !== "employees";
 
   return (
@@ -122,14 +122,14 @@ const EmployeePage = () => {
           <AttendanceList year={year} month={month} />
         )}
 
-        {/* 근무표 달력 탭 */}
-        {activeTab === "attendance-calendar" && (
-          <AttendanceCalendar year={year} month={month} />
-        )}
-
         {/* 급여 정산 탭 */}
         {activeTab === "salary" && (
           <SalaryPanel year={year} month={month} />
+        )}
+
+        {/* 근무표 달력 탭 */}
+        {activeTab === "calendar" && (
+          <AttendanceCalendar year={year} month={month} />
         )}
       </div>
     </div>

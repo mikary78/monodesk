@@ -1,534 +1,354 @@
 // ============================================================
-// AttendanceCalendar.jsx — 근무표 달력 컴포넌트
-// 전체 직원의 월별 근태를 달력 형태로 표시하고,
-// 셀 클릭으로 근무 상태를 빠르게 변경할 수 있습니다.
+// AttendanceCalendar.jsx — 월별 근무표 달력 컴포넌트
+// 직원(행) × 날짜(열) 그리드로 출근 상태를 표시하고 수정합니다.
 // ============================================================
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
-import {
-  getMonthlyAttendanceCalendar,
-  createAttendance,
-  updateAttendanceStatus,
-} from "../../../api/employeeApi";
+import { useState, useEffect, useRef } from "react";
+import { Loader2 } from "lucide-react";
+
+// 백엔드 직원 API 기본 URL (로컬 전용)
+const BASE_URL = "http://localhost:8000/api/employee";
 
 // ─────────────────────────────────────────
-// 상태별 라벨 / 색상 설정
+// 출근 상태 정의
 // ─────────────────────────────────────────
-const STATUS_CONFIG = {
-  work:            { label: "근무",     bg: "bg-green-100",  text: "text-green-700",  border: "border-green-200" },
-  off:             { label: "휴무",     bg: "bg-slate-100",  text: "text-slate-500",  border: "border-slate-200" },
-  annual:          { label: "월차",     bg: "bg-blue-100",   text: "text-blue-700",   border: "border-blue-200" },
-  half_am:         { label: "반차(오)", bg: "bg-sky-100",    text: "text-sky-700",    border: "border-sky-200" },
-  half_pm:         { label: "반차(오)", bg: "bg-sky-100",    text: "text-sky-700",    border: "border-sky-200" },
-  absent:          { label: "결근",     bg: "bg-red-100",    text: "text-red-700",    border: "border-red-200" },
-  early_leave:     { label: "조퇴",     bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" },
-  recommended_off: { label: "권장휴",   bg: "bg-purple-100", text: "text-purple-600", border: "border-purple-200" },
-  support:         { label: "지원",     bg: "bg-yellow-100", text: "text-yellow-700", border: "border-yellow-200" },
-};
 
-// 상태 드롭다운 순서
-const STATUS_ORDER = [
-  "work", "off", "annual", "half_am", "half_pm",
-  "absent", "early_leave", "recommended_off", "support",
+/** 9가지 출근 상태 목록 */
+const STATUS_LIST = [
+  { value: "work",             label: "출근",    bg: "bg-green-100",  text: "text-green-700"  },
+  { value: "off",              label: "휴무",    bg: "bg-slate-100",  text: "text-slate-500"  },
+  { value: "annual",           label: "연차",    bg: "bg-blue-100",   text: "text-blue-700"   },
+  { value: "half_am",          label: "오전반차", bg: "bg-sky-100",    text: "text-sky-700"    },
+  { value: "half_pm",          label: "오후반차", bg: "bg-sky-100",    text: "text-sky-700"    },
+  { value: "absent",           label: "결근",    bg: "bg-red-100",    text: "text-red-700"    },
+  { value: "early_leave",      label: "조퇴",    bg: "bg-orange-100", text: "text-orange-700" },
+  { value: "recommended_off",  label: "권장휴무", bg: "bg-purple-100", text: "text-purple-700" },
+  { value: "support",          label: "지원",    bg: "bg-yellow-100", text: "text-yellow-700" },
 ];
 
-// 요일 레이블
-const DAY_OF_WEEK = ["일", "월", "화", "수", "목", "금", "토"];
-
-
-// ─────────────────────────────────────────
-// 유틸리티 함수
-// ─────────────────────────────────────────
-
-/**
- * 해당 월의 날짜 배열을 생성합니다.
- * @param {number} year - 연도
- * @param {number} month - 월
- * @returns {Date[]} 날짜 배열
- */
-function getDaysInMonth(year, month) {
-  const days = [];
-  const lastDay = new Date(year, month, 0).getDate();
-  for (let d = 1; d <= lastDay; d++) {
-    days.push(new Date(year, month - 1, d));
-  }
-  return days;
+/** 상태 값으로 상태 객체를 조회합니다. */
+function getStatusDef(value) {
+  return STATUS_LIST.find((s) => s.value === value) || STATUS_LIST[1]; // 기본값: 휴무
 }
 
-/**
- * Date 객체를 YYYY-MM-DD 문자열로 변환합니다.
- * @param {Date} date
- * @returns {string}
- */
-function toDateStr(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-
 // ─────────────────────────────────────────
-// 상태 드롭다운 컴포넌트
+// 셀 드롭다운 컴포넌트
 // ─────────────────────────────────────────
 
 /**
- * 셀 클릭 시 나타나는 상태 선택 드롭다운.
- * 외부 클릭 시 자동으로 닫힙니다.
+ * 셀 클릭 시 표시되는 상태 선택 드롭다운.
+ * @param {object} props
+ * @param {string} props.currentStatus - 현재 상태 값
+ * @param {function} props.onSelect - 상태 선택 핸들러
+ * @param {function} props.onClose - 드롭다운 닫기 핸들러
  */
-function StatusDropdown({ onSelect, onClose }) {
+const StatusDropdown = ({ currentStatus, onSelect, onClose }) => {
   const ref = useRef(null);
 
-  // 외부 클릭 감지 → 드롭다운 닫기
+  // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
-    function handleClickOutside(e) {
+    const handleClick = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
         onClose();
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, [onClose]);
 
   return (
     <div
       ref={ref}
-      className="absolute z-50 top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[100px]"
+      className="absolute z-50 top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
     >
-      {STATUS_ORDER.map((key) => {
-        const cfg = STATUS_CONFIG[key];
-        return (
-          <button
-            key={key}
-            onClick={() => onSelect(key)}
-            className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-slate-50 transition-colors ${cfg.text}`}
-          >
-            {cfg.label}
-          </button>
-        );
-      })}
+      {STATUS_LIST.map((s) => (
+        <button
+          key={s.value}
+          onClick={() => onSelect(s.value)}
+          className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-slate-50 flex items-center gap-2 ${
+            currentStatus === s.value ? "bg-slate-50 font-semibold" : ""
+          }`}
+        >
+          {/* 상태 색상 점 */}
+          <span className={`w-2 h-2 rounded-full ${s.bg.replace("bg-", "bg-").replace("-100", "-400")}`} />
+          {s.label}
+        </button>
+      ))}
     </div>
   );
-}
-
-
-// ─────────────────────────────────────────
-// 달력 셀 컴포넌트
-// ─────────────────────────────────────────
-
-/**
- * 직원×날짜 교차 셀.
- * 클릭하면 상태 드롭다운이 나타납니다.
- */
-function CalendarCell({ employeeId, dateStr, cellData, onStatusChange }) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [updating, setUpdating] = useState(false);
-
-  const status = cellData?.status || null;
-  const cfg = status ? STATUS_CONFIG[status] : null;
-
-  /**
-   * 드롭다운에서 상태 선택 시 처리.
-   * record_id가 있으면 PATCH, 없으면 POST
-   */
-  async function handleSelect(newStatus) {
-    setShowDropdown(false);
-    setUpdating(true);
-    try {
-      await onStatusChange(employeeId, dateStr, cellData?.record_id || null, newStatus);
-    } finally {
-      setUpdating(false);
-    }
-  }
-
-  return (
-    <td className="border border-slate-100 p-0.5 min-w-[52px] max-w-[64px] relative">
-      <div className="relative">
-        {/* 상태 배지 (클릭 가능) */}
-        <button
-          onClick={() => setShowDropdown((v) => !v)}
-          disabled={updating}
-          className={`
-            w-full h-7 rounded text-[11px] font-medium border transition-colors
-            ${cfg
-              ? `${cfg.bg} ${cfg.text} ${cfg.border} hover:opacity-80`
-              : "bg-white border-slate-100 text-slate-300 hover:bg-slate-50"
-            }
-            ${updating ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-          `}
-          title={cfg ? cfg.label : "클릭하여 상태 설정"}
-        >
-          {updating ? (
-            <Loader2 size={10} className="animate-spin mx-auto" />
-          ) : (
-            cfg ? cfg.label : "·"
-          )}
-        </button>
-
-        {/* 상태 드롭다운 */}
-        {showDropdown && (
-          <StatusDropdown
-            onSelect={handleSelect}
-            onClose={() => setShowDropdown(false)}
-          />
-        )}
-      </div>
-    </td>
-  );
-}
-
+};
 
 // ─────────────────────────────────────────
-// 메인 AttendanceCalendar 컴포넌트
+// 메인 컴포넌트
 // ─────────────────────────────────────────
 
 /**
- * 근무표 달력 메인 컴포넌트.
- * @param {number} year - 연도 (부모에서 전달)
- * @param {number} month - 월 (부모에서 전달)
+ * 월별 근무표 달력 컴포넌트.
+ * @param {object} props
+ * @param {number} props.year - 조회 연도 (EmployeePage에서 전달)
+ * @param {number} props.month - 조회 월 (EmployeePage에서 전달)
  */
 const AttendanceCalendar = ({ year, month }) => {
   // 달력 데이터 상태
   const [calendarData, setCalendarData] = useState(null);
-  // 로딩 상태
-  const [loading, setLoading] = useState(false);
-  // 오류 상태
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 해당 월 날짜 배열
-  const days = getDaysInMonth(year, month);
+  // 현재 열려 있는 드롭다운 셀 위치 (employeeId + date 조합)
+  const [openCell, setOpenCell] = useState(null); // { employeeId, date }
 
-  /**
-   * 달력 데이터 로드 함수.
-   */
-  const loadCalendar = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getMonthlyAttendanceCalendar(year, month);
-      setCalendarData(data);
-    } catch (err) {
-      setError(err.message || "달력 데이터를 불러오는 중 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
+  // 상태 변경 중인 셀 (로딩 표시용)
+  const [updatingCell, setUpdatingCell] = useState(null); // "empId_date"
+
+  // ─────────────────────────────────────────
+  // 달력 데이터 로드
+  // ─────────────────────────────────────────
+
+  useEffect(() => {
+    const loadCalendar = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(
+          `${BASE_URL}/attendance/monthly-calendar?year=${year}&month=${month}`
+        );
+        if (!res.ok) throw new Error("달력 데이터를 불러오지 못했습니다.");
+        const data = await res.json();
+        setCalendarData(data);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadCalendar();
   }, [year, month]);
 
-  // 연도/월 변경 시 재로드
-  useEffect(() => {
-    loadCalendar();
-  }, [loadCalendar]);
+  // ─────────────────────────────────────────
+  // 상태 변경 처리
+  // ─────────────────────────────────────────
 
   /**
-   * 셀 상태 변경 처리.
-   * record_id 있으면 PATCH, 없으면 POST(신규 기록 생성)
+   * 특정 직원의 특정 날짜 출근 상태를 변경합니다.
+   * @param {number} recordId - 출퇴근 기록 ID
+   * @param {number} employeeId - 직원 ID
+   * @param {string} date - 날짜 (YYYY-MM-DD)
+   * @param {string} newStatus - 새 상태 값
    */
-  const handleStatusChange = useCallback(async (employeeId, dateStr, recordId, newStatus) => {
-    if (recordId) {
-      // 기존 기록 → 상태만 수정
-      await updateAttendanceStatus(recordId, newStatus);
-    } else {
-      // 신규 기록 → 날짜+직원+상태만 포함하여 생성
-      await createAttendance({
-        employee_id: employeeId,
-        work_date: dateStr,
-        daily_status: newStatus,
+  const handleStatusChange = async (recordId, employeeId, date, newStatus) => {
+    const cellKey = `${employeeId}_${date}`;
+    setOpenCell(null);
+    setUpdatingCell(cellKey);
+
+    try {
+      const res = await fetch(`${BASE_URL}/attendance/${recordId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ daily_status: newStatus }),
       });
-    }
-    // 성공 후 달력 데이터 리로드
-    await loadCalendar();
-  }, [loadCalendar]);
+      if (!res.ok) throw new Error("상태 변경에 실패했습니다.");
 
-  // ─── 집계 함수 ───────────────────────────────────
+      // 로컬 상태 업데이트 (리로드 없이)
+      setCalendarData((prev) => ({
+        ...prev,
+        employees: prev.employees.map((emp) => {
+          if (emp.id !== employeeId) return emp;
+          return {
+            ...emp,
+            records: emp.records.map((rec) =>
+              rec.date === date ? { ...rec, status: newStatus } : rec
+            ),
+          };
+        }),
+      }));
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setUpdatingCell(null);
+    }
+  };
+
+  // ─────────────────────────────────────────
+  // 월별 집계 계산
+  // ─────────────────────────────────────────
 
   /**
-   * 직원의 월간 근무 상태 집계.
-   * @param {string} empId - 직원 ID (문자열)
-   * @returns {{ workDays, offDays, annualDays }}
+   * 직원의 월별 상태 집계를 계산합니다.
+   * @param {Array} records - 출퇴근 기록 배열
+   * @returns {{ work: number, off: number, annual: number }}
    */
-  function getSummaryForEmployee(empId) {
-    const empAttendance = calendarData?.attendance?.[empId] || {};
-    let workDays = 0;
-    let offDays = 0;
-    let annualDays = 0;
+  const calcSummary = (records) => {
+    return records.reduce(
+      (acc, rec) => {
+        if (rec.status === "work") acc.work++;
+        else if (rec.status === "off") acc.off++;
+        else if (rec.status === "annual") acc.annual++;
+        return acc;
+      },
+      { work: 0, off: 0, annual: 0 }
+    );
+  };
 
-    for (const day of days) {
-      const dateStr = toDateStr(day);
-      const cell = empAttendance[dateStr];
-      const status = cell?.status;
-      if (!status) continue;
-      if (status === "work" || status === "support") workDays++;
-      if (status === "off" || status === "recommended_off") offDays++;
-      if (status === "annual") annualDays++;
-      if (status === "half_am" || status === "half_pm") annualDays += 0.5;
-    }
+  // ─────────────────────────────────────────
+  // 렌더링
+  // ─────────────────────────────────────────
 
-    return { workDays, offDays, annualDays };
-  }
-
-  /**
-   * 날짜별 근무 인원 수 (work/support 상태인 직원 수).
-   * @param {string} dateStr - YYYY-MM-DD
-   * @returns {number}
-   */
-  function getWorkCountForDate(dateStr) {
-    if (!calendarData) return 0;
-    let count = 0;
-    for (const emp of calendarData.employees) {
-      const cell = calendarData.attendance?.[String(emp.id)]?.[dateStr];
-      if (cell && (cell.status === "work" || cell.status === "support")) count++;
-    }
-    return count;
-  }
-
-  // ─── 직원을 고용 형태별로 그룹화 ────────────────
-
-  const fullTimeEmployees = calendarData?.employees?.filter(
-    (e) => e.employment_type === "FULL_TIME"
-  ) || [];
-  const partTimeEmployees = calendarData?.employees?.filter(
-    (e) => e.employment_type !== "FULL_TIME"
-  ) || [];
-
-
-  // ─── 렌더링 ──────────────────────────────────────
-
-  // 로딩 중
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-400">
+      <div className="flex items-center justify-center py-20 text-slate-400">
         <Loader2 size={24} className="animate-spin mr-2" />
-        <span>달력 데이터를 불러오는 중...</span>
+        달력 데이터를 불러오는 중...
       </div>
     );
   }
 
-  // 오류 발생
   if (error) {
     return (
-      <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
-        <AlertCircle size={18} />
-        <span className="text-sm">{error}</span>
-        <button
-          onClick={loadCalendar}
-          className="ml-auto text-xs underline hover:no-underline"
-        >
-          다시 시도
-        </button>
+      <div className="text-center py-20 text-red-500">
+        <p className="font-medium">{error}</p>
       </div>
     );
   }
 
-  // 직원 없음
   if (!calendarData || calendarData.employees.length === 0) {
     return (
-      <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
+      <div className="text-center py-20 text-slate-400">
         등록된 직원이 없습니다.
       </div>
     );
   }
 
-  // 모든 직원 순서 (정직원 → 아르바이트)
-  const allEmployees = [...fullTimeEmployees, ...partTimeEmployees];
+  const { days, employees } = calendarData;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      {/* 상단 범례 */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-100 bg-slate-50">
-        <span className="text-xs font-medium text-slate-500 mr-1">범례</span>
-        {STATUS_ORDER.map((key) => {
-          const cfg = STATUS_CONFIG[key];
-          return (
-            <span
-              key={key}
-              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}
-            >
-              {cfg.label}
-            </span>
-          );
-        })}
-        <span className="ml-auto text-[11px] text-slate-400">셀 클릭 → 상태 변경</span>
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      {/* 상단 안내 */}
+      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-700">
+          {year}년 {month}월 근무표
+        </h2>
+        <p className="text-xs text-slate-400">셀을 클릭하여 상태를 변경하세요.</p>
       </div>
 
-      {/* 달력 테이블 (가로 스크롤 가능) */}
+      {/* 가로 스크롤 가능한 그리드 */}
       <div className="overflow-x-auto">
-        <table className="border-collapse text-xs w-full">
+        <table className="w-full text-xs border-collapse">
           <thead>
-            <tr className="bg-slate-50">
-              {/* 직원명 컬럼 헤더 */}
-              <th className="border border-slate-200 px-3 py-2 text-left font-semibold text-slate-600 sticky left-0 bg-slate-50 z-10 min-w-[90px]">
+            <tr className="bg-slate-50 border-b border-slate-200">
+              {/* 직원 이름 열 헤더 */}
+              <th className="sticky left-0 z-10 bg-slate-50 text-left px-4 py-3 font-semibold text-slate-600 min-w-[120px] border-r border-slate-200">
                 직원
               </th>
-
-              {/* 날짜 헤더 (1일~말일) */}
+              {/* 날짜 열 헤더 */}
               {days.map((day) => {
-                const dow = day.getDay(); // 0=일, 6=토
-                const isSun = dow === 0;
-                const isSat = dow === 6;
+                // 요일 계산 (0=일, 6=토)
+                const d = new Date(day);
+                const dow = d.getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const DOW_KR = ["일", "월", "화", "수", "목", "금", "토"];
                 return (
                   <th
-                    key={toDateStr(day)}
-                    className={`border border-slate-200 px-1 py-1 text-center font-medium min-w-[52px] ${
-                      isSun ? "text-red-500 bg-red-50" :
-                      isSat ? "text-blue-500 bg-blue-50" :
-                      "text-slate-600"
+                    key={day}
+                    className={`text-center px-1 py-2 font-medium min-w-[44px] ${
+                      isWeekend ? "text-red-400" : "text-slate-500"
                     }`}
                   >
-                    <div>{day.getDate()}</div>
-                    <div className="text-[10px] font-normal">{DAY_OF_WEEK[dow]}</div>
+                    <div>{parseInt(day.split("-")[2])}</div>
+                    <div className="text-[10px] opacity-70">{DOW_KR[dow]}</div>
                   </th>
                 );
               })}
-
-              {/* 우측 집계 헤더 */}
-              <th className="border border-slate-200 px-2 py-2 text-center font-semibold text-slate-600 min-w-[44px] bg-slate-50">
-                근무
-              </th>
-              <th className="border border-slate-200 px-2 py-2 text-center font-semibold text-slate-600 min-w-[44px] bg-slate-50">
-                휴무
-              </th>
-              <th className="border border-slate-200 px-2 py-2 text-center font-semibold text-slate-600 min-w-[44px] bg-slate-50">
-                월차
+              {/* 집계 열 헤더 */}
+              <th className="text-center px-3 py-3 font-semibold text-slate-600 min-w-[90px] border-l border-slate-200 bg-slate-50">
+                출근/휴무/연차
               </th>
             </tr>
           </thead>
-
           <tbody>
-            {/* 정직원 섹션 */}
-            {fullTimeEmployees.length > 0 && (
-              <tr>
-                <td
-                  colSpan={days.length + 4}
-                  className="px-3 py-1 bg-blue-50 text-[11px] font-semibold text-blue-600 border border-slate-200"
-                >
-                  정직원
-                </td>
-              </tr>
-            )}
+            {employees.map((emp) => {
+              // records를 날짜 키로 인덱싱
+              const recordMap = {};
+              emp.records.forEach((rec) => {
+                recordMap[rec.date] = rec;
+              });
 
-            {fullTimeEmployees.map((emp) => {
-              const summary = getSummaryForEmployee(String(emp.id));
+              // 월별 집계
+              const summary = calcSummary(emp.records);
+
               return (
-                <tr key={emp.id} className="hover:bg-slate-50">
-                  {/* 직원 이름 (좌측 고정) */}
-                  <td className="border border-slate-200 px-3 py-1 font-medium text-slate-700 sticky left-0 bg-white z-10 whitespace-nowrap">
-                    <div>{emp.name}</div>
-                    {emp.position && (
-                      <div className="text-[10px] text-slate-400">{emp.position}</div>
-                    )}
+                <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  {/* 직원 이름 + 파트 */}
+                  <td className="sticky left-0 z-10 bg-white border-r border-slate-100 px-4 py-2 hover:bg-slate-50/50">
+                    <div className="font-medium text-slate-800">{emp.name}</div>
+                    <div className="text-[10px] text-slate-400">{emp.work_part}</div>
                   </td>
 
                   {/* 날짜별 상태 셀 */}
                   {days.map((day) => {
-                    const dateStr = toDateStr(day);
-                    const cellData = calendarData.attendance?.[String(emp.id)]?.[dateStr] || null;
+                    const rec = recordMap[day];
+                    const status = rec?.status || "off";
+                    const statusDef = getStatusDef(status);
+                    const cellKey = `${emp.id}_${day}`;
+                    const isUpdating = updatingCell === cellKey;
+                    const isOpen =
+                      openCell?.employeeId === emp.id && openCell?.date === day;
+
                     return (
-                      <CalendarCell
-                        key={dateStr}
-                        employeeId={emp.id}
-                        dateStr={dateStr}
-                        cellData={cellData}
-                        onStatusChange={handleStatusChange}
-                      />
+                      <td key={day} className="text-center px-1 py-1.5 relative">
+                        {/* 상태 배지 버튼 */}
+                        <button
+                          onClick={() => {
+                            if (!rec) return; // 기록 없으면 클릭 불가
+                            setOpenCell(isOpen ? null : { employeeId: emp.id, date: day });
+                          }}
+                          disabled={isUpdating || !rec}
+                          className={`w-full rounded px-1 py-1 text-[10px] font-medium transition-opacity ${
+                            statusDef.bg
+                          } ${statusDef.text} ${
+                            rec ? "cursor-pointer hover:opacity-80" : "cursor-default opacity-30"
+                          } ${isUpdating ? "opacity-50" : ""}`}
+                          title={rec ? statusDef.label : "기록 없음"}
+                        >
+                          {isUpdating ? "..." : statusDef.label}
+                        </button>
+
+                        {/* 상태 선택 드롭다운 */}
+                        {isOpen && (
+                          <StatusDropdown
+                            currentStatus={status}
+                            onSelect={(newStatus) =>
+                              handleStatusChange(rec.id, emp.id, day, newStatus)
+                            }
+                            onClose={() => setOpenCell(null)}
+                          />
+                        )}
+                      </td>
                     );
                   })}
 
-                  {/* 우측 집계 */}
-                  <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-green-700 bg-green-50">
-                    {summary.workDays}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-slate-500 bg-slate-50">
-                    {summary.offDays}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-blue-600 bg-blue-50">
-                    {summary.annualDays}
+                  {/* 월별 집계 열 */}
+                  <td className="text-center px-3 py-2 border-l border-slate-100 whitespace-nowrap">
+                    <span className="text-green-600 font-semibold">{summary.work}</span>
+                    <span className="text-slate-300 mx-1">/</span>
+                    <span className="text-slate-500">{summary.off}</span>
+                    <span className="text-slate-300 mx-1">/</span>
+                    <span className="text-blue-600">{summary.annual}</span>
                   </td>
                 </tr>
               );
             })}
-
-            {/* 아르바이트/3.3% 섹션 */}
-            {partTimeEmployees.length > 0 && (
-              <tr>
-                <td
-                  colSpan={days.length + 4}
-                  className="px-3 py-1 bg-amber-50 text-[11px] font-semibold text-amber-600 border border-slate-200"
-                >
-                  아르바이트 / 3.3%
-                </td>
-              </tr>
-            )}
-
-            {partTimeEmployees.map((emp) => {
-              const summary = getSummaryForEmployee(String(emp.id));
-              return (
-                <tr key={emp.id} className="hover:bg-slate-50">
-                  {/* 직원 이름 (좌측 고정) */}
-                  <td className="border border-slate-200 px-3 py-1 font-medium text-slate-700 sticky left-0 bg-white z-10 whitespace-nowrap">
-                    <div>{emp.name}</div>
-                    {emp.position && (
-                      <div className="text-[10px] text-slate-400">{emp.position}</div>
-                    )}
-                  </td>
-
-                  {/* 날짜별 상태 셀 */}
-                  {days.map((day) => {
-                    const dateStr = toDateStr(day);
-                    const cellData = calendarData.attendance?.[String(emp.id)]?.[dateStr] || null;
-                    return (
-                      <CalendarCell
-                        key={dateStr}
-                        employeeId={emp.id}
-                        dateStr={dateStr}
-                        cellData={cellData}
-                        onStatusChange={handleStatusChange}
-                      />
-                    );
-                  })}
-
-                  {/* 우측 집계 */}
-                  <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-green-700 bg-green-50">
-                    {summary.workDays}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-slate-500 bg-slate-50">
-                    {summary.offDays}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-blue-600 bg-blue-50">
-                    {summary.annualDays}
-                  </td>
-                </tr>
-              );
-            })}
-
-            {/* 하단 합계 행: 날짜별 근무 인원 수 */}
-            <tr className="bg-slate-50 font-semibold">
-              <td className="border border-slate-200 px-3 py-1 text-slate-600 sticky left-0 bg-slate-50 z-10">
-                근무 인원
-              </td>
-              {days.map((day) => {
-                const dateStr = toDateStr(day);
-                const count = getWorkCountForDate(dateStr);
-                return (
-                  <td
-                    key={dateStr}
-                    className="border border-slate-200 px-1 py-1 text-center text-slate-700"
-                  >
-                    {count > 0 ? (
-                      <span className="font-bold text-green-700">{count}</span>
-                    ) : (
-                      <span className="text-slate-300">-</span>
-                    )}
-                  </td>
-                );
-              })}
-              {/* 우측 집계 셀 (합계 행에서는 비워둠) */}
-              <td className="border border-slate-200" />
-              <td className="border border-slate-200" />
-              <td className="border border-slate-200" />
-            </tr>
           </tbody>
         </table>
+      </div>
+
+      {/* 범례 */}
+      <div className="px-6 py-3 border-t border-slate-100 flex flex-wrap gap-3">
+        {STATUS_LIST.map((s) => (
+          <span key={s.value} className="flex items-center gap-1 text-[11px]">
+            <span className={`w-2.5 h-2.5 rounded-sm ${s.bg}`} />
+            <span className={s.text}>{s.label}</span>
+          </span>
+        ))}
       </div>
     </div>
   );
