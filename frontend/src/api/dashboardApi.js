@@ -44,6 +44,40 @@ export async function fetchDashboardSummary(year, month) {
   return request(`${BASE_URL}/summary?${params}`);
 }
 
+/**
+ * 일별 KPI 데이터 조회.
+ * 특정 날짜의 매출/지출, 전일·전주 비교, 월 누적 현황을 반환합니다.
+ * @param {string} date - 조회 날짜 (YYYY-MM-DD 형식)
+ * @returns {Promise<object>} 일별 KPI 데이터
+ */
+export async function getDailyKpi(date) {
+  const params = new URLSearchParams({ date });
+  return request(`${BASE_URL}/daily?${params}`);
+}
+
+/**
+ * 주별 KPI 데이터 조회.
+ * 해당 날짜가 속한 주(월~일)의 요일별 매출, 전주 대비를 반환합니다.
+ * @param {string} date - 기준 날짜 (YYYY-MM-DD 형식)
+ * @returns {Promise<object>} 주별 KPI 데이터
+ */
+export async function getWeeklyKpi(date) {
+  const params = new URLSearchParams({ date });
+  return request(`${BASE_URL}/weekly?${params}`);
+}
+
+/**
+ * 월별 상세 KPI 데이터 조회.
+ * 손익 구조(원재료비/인건비/고정비), 일별/주차별 트렌드, 달력 히트맵 데이터를 반환합니다.
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ * @returns {Promise<object>} 월별 상세 KPI 데이터
+ */
+export async function getMonthlyKpi(year, month) {
+  const params = new URLSearchParams({ year, month });
+  return request(`${BASE_URL}/monthly?${params}`);
+}
+
 // ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────

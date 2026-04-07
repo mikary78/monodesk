@@ -5,8 +5,9 @@
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from typing import List
-from datetime import date
+from typing import List, Optional
+from datetime import date, timedelta
+import calendar
 
 from models.accounting import ExpenseCategory, ExpenseRecord, SalesRecord
 from models.sales_analysis import PosSalesRaw
@@ -21,6 +22,12 @@ from schemas.dashboard import (
     SalaryKPI,
     RecentExpense,
     OrderStatusKPI,
+    DailyKpiResponse,
+    WeeklyKpiResponse,
+    WeeklyDailyBreakdown,
+    MonthlyKpiResponse,
+    MonthlyWeeklyTrend,
+    MonthlyDailyTrend,
 )
 
 
@@ -305,6 +312,412 @@ def _build_order_status(db: Session) -> OrderStatusKPI:
     return OrderStatusKPI(
         pending_orders=pending_count,
         expected_today=today_count,
+    )
+
+
+# ─────────────────────────────────────────
+# 일별/주별/월별 KPI 서비스 함수
+# ─────────────────────────────────────────
+
+def _get_day_sales(db: Session, date_str: str) -> dict:
+    """
+    특정 날짜의 매출 데이터를 집계합니다.
+    이중 계산 방지 규칙을 적용하여 수동 입력 + POS 합산합니다.
+
+    반환: card, cash, delivery, receipt_count, customer_count, discount, service
+    """
+    # 수동 입력 매출 집계 (is_pos_synced == 0)
+    manual = db.query(
+        func.coalesce(func.sum(SalesRecord.card_amount), 0).label("card"),
+        func.coalesce(func.sum(SalesRecord.cash_amount), 0).label("cash"),
+        func.coalesce(func.sum(SalesRecord.delivery_amount), 0).label("delivery"),
+        func.coalesce(func.sum(SalesRecord.receipt_count), 0).label("receipt_count"),
+        func.coalesce(func.sum(SalesRecord.customer_count), 0).label("customer_count"),
+        func.coalesce(func.sum(SalesRecord.discount_amount), 0).label("discount"),
+        func.coalesce(func.sum(SalesRecord.service_amount), 0).label("service"),
+    ).filter(
+        SalesRecord.is_deleted == 0,
+        SalesRecord.is_pos_synced == 0,
+        SalesRecord.sales_date == date_str,
+    ).first()
+
+    # POS 원본 매출 집계 (취소 제외)
+    pos = db.query(
+        func.coalesce(func.sum(PosSalesRaw.total_price), 0).label("pos_total")
+    ).filter(
+        PosSalesRaw.is_deleted == 0,
+        PosSalesRaw.is_cancelled == False,
+        PosSalesRaw.sale_date == date_str,
+    ).first()
+
+    card = float(manual.card or 0)
+    cash = float(manual.cash or 0)
+    delivery = float(manual.delivery or 0)
+    pos_total = float(pos.pos_total or 0)
+    total = card + cash + delivery + pos_total
+
+    return {
+        "total_sales": total,
+        "card_sales": card,
+        "cash_sales": cash,
+        "delivery_sales": delivery,
+        "receipt_count": int(manual.receipt_count or 0),
+        "customer_count": int(manual.customer_count or 0),
+        "discount_amount": float(manual.discount or 0),
+        "service_amount": float(manual.service or 0),
+    }
+
+
+def _get_day_expense(db: Session, date_str: str) -> float:
+    """
+    특정 날짜의 총 지출(공급가 + 부가세)을 집계합니다.
+    """
+    result = db.query(
+        func.coalesce(func.sum(ExpenseRecord.amount + ExpenseRecord.vat), 0).label("total")
+    ).filter(
+        ExpenseRecord.is_deleted == 0,
+        ExpenseRecord.expense_date == date_str,
+    ).first()
+    return float(result.total or 0)
+
+
+def _count_business_days(db: Session, year: int, month: int, up_to_date: Optional[str] = None) -> tuple[int, int]:
+    """
+    해당 월의 영업일 수를 반환합니다.
+    SalesRecord 또는 PosSalesRaw에 데이터가 있는 날만 영업일로 판단합니다.
+
+    반환: (경과 영업일 수, 총 영업일 수)
+    총 영업일 수는 실제 기록 기반 또는 고정 25일 중 큰 값 사용.
+    """
+    start, end = _get_date_range(year, month)
+
+    # 매출 기록이 있는 날짜 목록 조회
+    manual_dates = db.query(SalesRecord.sales_date).filter(
+        SalesRecord.is_deleted == 0,
+        SalesRecord.sales_date >= start,
+        SalesRecord.sales_date < end,
+    ).distinct().all()
+
+    pos_dates = db.query(PosSalesRaw.sale_date).filter(
+        PosSalesRaw.is_deleted == 0,
+        PosSalesRaw.is_cancelled == False,
+        PosSalesRaw.sale_date >= start,
+        PosSalesRaw.sale_date < end,
+    ).distinct().all()
+
+    # 합집합으로 영업일 계산
+    all_dates = set()
+    all_dates.update(d[0] for d in manual_dates)
+    all_dates.update(d[0] for d in pos_dates)
+
+    total_days = max(len(all_dates), 25)  # 최소 25일 보장
+
+    if up_to_date:
+        # 해당 날짜까지의 영업일 수만 카운트
+        passed = len([d for d in all_dates if d <= up_to_date])
+    else:
+        passed = len(all_dates)
+
+    return passed, total_days
+
+
+def get_daily_kpi(db: Session, target_date: str) -> DailyKpiResponse:
+    """
+    특정 날짜의 일별 KPI를 집계합니다.
+    당일 매출/지출, 전일/전주 비교, 월 누적 현황을 반환합니다.
+    """
+    # 날짜 파싱
+    d = date.fromisoformat(target_date)
+    year, month = d.year, d.month
+
+    # 당일 매출 집계
+    day_sales = _get_day_sales(db, target_date)
+    total_sales = day_sales["total_sales"]
+
+    # 당일 지출
+    total_expense = _get_day_expense(db, target_date)
+    net_profit = total_sales - total_expense
+
+    # 테이블 단가 (영수건수 기준)
+    receipt_count = day_sales["receipt_count"]
+    table_average = total_sales / receipt_count if receipt_count > 0 else 0.0
+
+    # 전일 매출
+    prev_day_str = (d - timedelta(days=1)).isoformat()
+    prev_day_data = _get_day_sales(db, prev_day_str)
+    prev_day_sales = prev_day_data["total_sales"]
+
+    # 전주 같은 요일 매출
+    prev_week_str = (d - timedelta(days=7)).isoformat()
+    prev_week_data = _get_day_sales(db, prev_week_str)
+    prev_week_same_day_sales = prev_week_data["total_sales"]
+
+    # 전주 같은 요일 대비 증감률 계산
+    if prev_week_same_day_sales > 0:
+        prev_week_same_day_diff = round(
+            (total_sales - prev_week_same_day_sales) / prev_week_same_day_sales * 100, 1
+        )
+    else:
+        prev_week_same_day_diff = 0.0
+
+    # 월 누적 데이터 집계 (1일 ~ 당일)
+    month_start = f"{year}-{month:02d}-01"
+    # 다음날 00:00 기준으로 범위 설정 (당일 포함)
+    next_day_str = (d + timedelta(days=1)).isoformat()
+    monthly_total_sales = _get_total_sales(db, month_start, next_day_str)
+    monthly_total_expense = _get_total_expense(db, month_start, next_day_str)
+    monthly_net_profit = monthly_total_sales - monthly_total_expense
+
+    # 영업일 수 계산
+    business_days_passed, business_days_total = _count_business_days(db, year, month, target_date)
+
+    # 일 목표 매출 (전월 월 매출 / 영업일 수 — 또는 월간 목표 매출 기반)
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    prev_start, prev_end = _get_date_range(prev_year, prev_month)
+    prev_month_sales = _get_total_sales(db, prev_start, prev_end)
+    target_sales = prev_month_sales / business_days_total if business_days_total > 0 else 0.0
+
+    # 월 목표 달성률 (월 누적 / 전월 매출 기준)
+    if prev_month_sales > 0:
+        monthly_achievement_rate = round(monthly_total_sales / prev_month_sales * 100, 1)
+    else:
+        monthly_achievement_rate = 0.0
+
+    # 당일 목표 달성률
+    achievement_rate = round(total_sales / target_sales * 100, 1) if target_sales > 0 else 0.0
+
+    return DailyKpiResponse(
+        date=target_date,
+        total_sales=total_sales,
+        card_sales=day_sales["card_sales"],
+        cash_sales=day_sales["cash_sales"],
+        delivery_sales=day_sales["delivery_sales"],
+        customer_count=day_sales["customer_count"],
+        receipt_count=receipt_count,
+        table_average=round(table_average, 0),
+        total_expense=total_expense,
+        net_profit=net_profit,
+        achievement_rate=achievement_rate,
+        discount_amount=day_sales["discount_amount"],
+        service_amount=day_sales["service_amount"],
+        prev_day_sales=prev_day_sales,
+        prev_week_same_day_sales=prev_week_same_day_sales,
+        prev_week_same_day_diff=prev_week_same_day_diff,
+        monthly_total_sales=monthly_total_sales,
+        monthly_total_expense=monthly_total_expense,
+        monthly_net_profit=monthly_net_profit,
+        monthly_achievement_rate=monthly_achievement_rate,
+        business_days_passed=business_days_passed,
+        business_days_total=business_days_total,
+        target_sales=round(target_sales, 0),
+    )
+
+
+def get_weekly_kpi(db: Session, target_date: str) -> WeeklyKpiResponse:
+    """
+    해당 날짜가 속한 주(월~일)의 주별 KPI를 집계합니다.
+    요일별 매출 상세, 전주 대비, 베스트/워스트 요일을 반환합니다.
+    """
+    # 한국 요일명 매핑 (0=월요일 ... 6=일요일)
+    KR_DAY = ["월", "화", "수", "목", "금", "토", "일"]
+
+    d = date.fromisoformat(target_date)
+    # 해당 주 월요일 계산
+    week_start = d - timedelta(days=d.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    # 주간 총 매출/지출/고객수 초기화
+    weekly_total_sales = 0.0
+    weekly_total_expense = 0.0
+    weekly_customer_count = 0
+    daily_breakdown = []
+
+    # 7일 반복 집계
+    for i in range(7):
+        cur_date = week_start + timedelta(days=i)
+        cur_str = cur_date.isoformat()
+        day_data = _get_day_sales(db, cur_str)
+        day_expense = _get_day_expense(db, cur_str)
+
+        # 매출 데이터가 없으면 휴무일로 간주
+        is_holiday = day_data["total_sales"] == 0 and day_data["customer_count"] == 0
+
+        weekly_total_sales += day_data["total_sales"]
+        weekly_total_expense += day_expense
+        weekly_customer_count += day_data["customer_count"]
+
+        daily_breakdown.append(WeeklyDailyBreakdown(
+            date=cur_str,
+            day_of_week=KR_DAY[i],
+            total_sales=day_data["total_sales"],
+            customer_count=day_data["customer_count"],
+            is_holiday=is_holiday,
+        ))
+
+    weekly_net_profit = weekly_total_sales - weekly_total_expense
+
+    # 베스트/워스트 요일 계산 (영업일만 대상)
+    sales_days = [b for b in daily_breakdown if not b.is_holiday]
+    best_day = max(sales_days, key=lambda x: x.total_sales).day_of_week if sales_days else None
+    worst_day = min(sales_days, key=lambda x: x.total_sales).day_of_week if sales_days else None
+
+    # 전주 집계
+    prev_week_start = week_start - timedelta(days=7)
+    prev_week_end_str = (prev_week_start + timedelta(days=7)).isoformat()
+    prev_week_start_str = prev_week_start.isoformat()
+    prev_week_total = _get_total_sales(db, prev_week_start_str, prev_week_end_str)
+
+    # 전주 대비 증감률
+    if prev_week_total > 0:
+        prev_week_diff = round((weekly_total_sales - prev_week_total) / prev_week_total * 100, 1)
+    else:
+        prev_week_diff = 0.0
+
+    return WeeklyKpiResponse(
+        week_start=week_start.isoformat(),
+        week_end=week_end.isoformat(),
+        weekly_total_sales=weekly_total_sales,
+        weekly_total_expense=weekly_total_expense,
+        weekly_net_profit=weekly_net_profit,
+        weekly_customer_count=weekly_customer_count,
+        daily_breakdown=daily_breakdown,
+        best_day=best_day,
+        worst_day=worst_day,
+        prev_week_total=prev_week_total,
+        prev_week_diff=prev_week_diff,
+    )
+
+
+def get_monthly_kpi(db: Session, year: int, month: int) -> MonthlyKpiResponse:
+    """
+    특정 연월의 상세 월별 KPI를 집계합니다.
+    손익 구조(원재료비/인건비/고정비), 일별/주차별 트렌드, 매출 최고 날짜를 포함합니다.
+    """
+    start, end = _get_date_range(year, month)
+
+    # 총 매출/지출
+    total_sales = _get_total_sales(db, start, end)
+    total_expense = _get_total_expense(db, start, end)
+    net_profit = total_sales - total_expense
+    profit_margin = round(net_profit / total_sales * 100, 1) if total_sales > 0 else 0.0
+
+    # 전월 매출 (증감률 계산용)
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    prev_start, prev_end = _get_date_range(prev_year, prev_month)
+    prev_month_sales = _get_total_sales(db, prev_start, prev_end)
+
+    sales_growth_rate = None
+    if prev_month_sales > 0:
+        sales_growth_rate = round((total_sales - prev_month_sales) / prev_month_sales * 100, 1)
+
+    # 원재료비: 카테고리명에 원재료/식자재/주류 포함
+    food_cost_result = db.query(
+        func.coalesce(func.sum(ExpenseRecord.amount + ExpenseRecord.vat), 0).label("total")
+    ).join(
+        ExpenseCategory, ExpenseRecord.category_id == ExpenseCategory.id
+    ).filter(
+        ExpenseRecord.is_deleted == 0,
+        ExpenseRecord.expense_date >= start,
+        ExpenseRecord.expense_date < end,
+        ExpenseCategory.name.like("%원재료%") |
+        ExpenseCategory.name.like("%식자재%") |
+        ExpenseCategory.name.like("%주류%"),
+    ).first()
+    food_cost_total = float(food_cost_result.total or 0)
+    food_cost_rate = round(food_cost_total / total_sales * 100, 1) if total_sales > 0 else 0.0
+
+    # 인건비: SalaryRecord에서 해당 월 net_pay 합산
+    labor_result = db.query(
+        func.coalesce(func.sum(SalaryRecord.net_pay), 0).label("total")
+    ).filter(
+        SalaryRecord.is_deleted == 0,
+        SalaryRecord.year == year,
+        SalaryRecord.month == month,
+    ).first()
+    labor_cost_total = float(labor_result.total or 0)
+    labor_cost_rate = round(labor_cost_total / total_sales * 100, 1) if total_sales > 0 else 0.0
+
+    # 고정비: 카테고리명에 고정/임대/관리비 포함
+    fixed_cost_result = db.query(
+        func.coalesce(func.sum(ExpenseRecord.amount + ExpenseRecord.vat), 0).label("total")
+    ).join(
+        ExpenseCategory, ExpenseRecord.category_id == ExpenseCategory.id
+    ).filter(
+        ExpenseRecord.is_deleted == 0,
+        ExpenseRecord.expense_date >= start,
+        ExpenseRecord.expense_date < end,
+        ExpenseCategory.name.like("%고정%") |
+        ExpenseCategory.name.like("%임대%") |
+        ExpenseCategory.name.like("%관리비%"),
+    ).first()
+    fixed_cost_total = float(fixed_cost_result.total or 0)
+
+    # 일별 트렌드 집계
+    days_in_month = calendar.monthrange(year, month)[1]
+    daily_trend = []
+    best_sales = 0.0
+    top_sales_day = None
+
+    for day in range(1, days_in_month + 1):
+        date_str = f"{year}-{month:02d}-{day:02d}"
+        day_data = _get_day_sales(db, date_str)
+        day_sales_val = day_data["total_sales"]
+
+        daily_trend.append(MonthlyDailyTrend(
+            date=date_str,
+            sales=day_sales_val,
+            customer_count=day_data["customer_count"],
+        ))
+
+        if day_sales_val > best_sales:
+            best_sales = day_sales_val
+            top_sales_day = date_str
+
+    # 영업일 수 계산 (일 평균 매출용)
+    business_days = len([t for t in daily_trend if t.sales > 0])
+    avg_daily_sales = round(total_sales / business_days, 0) if business_days > 0 else 0.0
+
+    # 주차별 트렌드 집계 (1~4주차, 각 주는 7일 단위)
+    weekly_trend = []
+    for week_num in range(1, 5):
+        week_start_day = (week_num - 1) * 7 + 1
+        week_end_day = min(week_num * 7, days_in_month)
+        week_start_str = f"{year}-{month:02d}-{week_start_day:02d}"
+        week_end_str = f"{year}-{month:02d}-{week_end_day:02d}"
+        # 다음날 00:00까지로 범위 설정
+        week_end_exclusive = (
+            date.fromisoformat(week_end_str) + timedelta(days=1)
+        ).isoformat()
+        week_sales = _get_total_sales(db, week_start_str, week_end_exclusive)
+        week_expense = _get_total_expense(db, week_start_str, week_end_exclusive)
+
+        weekly_trend.append(MonthlyWeeklyTrend(
+            week=week_num,
+            sales=week_sales,
+            expense=week_expense,
+        ))
+
+    return MonthlyKpiResponse(
+        year=year,
+        month=month,
+        total_sales=total_sales,
+        total_expense=total_expense,
+        net_profit=net_profit,
+        profit_margin=profit_margin,
+        avg_daily_sales=avg_daily_sales,
+        sales_growth_rate=sales_growth_rate,
+        food_cost_total=food_cost_total,
+        food_cost_rate=food_cost_rate,
+        labor_cost_total=labor_cost_total,
+        labor_cost_rate=labor_cost_rate,
+        fixed_cost_total=fixed_cost_total,
+        fixed_cost_budget=0,
+        weekly_trend=weekly_trend,
+        daily_trend=daily_trend,
+        top_sales_day=top_sales_day,
+        prev_month_sales=prev_month_sales,
     )
 
 
