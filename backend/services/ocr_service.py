@@ -1,428 +1,207 @@
 # ============================================================
-# services/ocr_service.py — 영수증/거래명세서 OCR 처리 서비스
-# 이미지 전처리(OpenCV) → Tesseract OCR → 텍스트 파싱 → 재고 매칭
+# services/ocr_service.py — 영수증 OCR 처리 서비스
+# Claude Vision API (claude-sonnet-4-20250514)를 사용하여
+# 영수증/거래명세서 이미지에서 구조화된 데이터를 추출합니다.
+#
+# 변경 이력:
+#   2026-04-07 — Tesseract OCR + OpenCV 전처리 방식에서 교체
+#                Claude Vision API 기반으로 전면 재작성
 # ============================================================
 
 import os
-import re
+import json
+import base64
 import logging
+from pathlib import Path
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor
 
-import cv2
-import numpy as np
-import pytesseract
-from PIL import Image
-import io
-
-# OCR 작업용 스레드 풀 (blocking 작업을 async 환경에서 실행)
-_ocr_executor = ThreadPoolExecutor(max_workers=2)
-
+import anthropic
 from sqlalchemy.orm import Session
 from models.inventory import InventoryItem
 
-# ─────────────────────────────────────────
-# 경로 설정
-# ─────────────────────────────────────────
-
-# Tesseract 실행 파일 경로 (Windows 로컬 설치 기준)
-TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-
-# tessdata 경로 (프로젝트 내 kor+eng 팩)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESSDATA_DIR = os.path.join(BASE_DIR, "tessdata")
-
-# Tesseract 경로 설정
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
-
 logger = logging.getLogger(__name__)
 
-
 # ─────────────────────────────────────────
-# 이미지 전처리
+# Claude API 클라이언트 (싱글턴)
 # ─────────────────────────────────────────
 
-def preprocess_image(image_bytes: bytes) -> np.ndarray:
+# 모듈 전역 클라이언트 인스턴스 (최초 호출 시 한 번만 생성)
+_claude_client = None
+
+
+def _get_client() -> anthropic.Anthropic:
     """
-    OCR 정확도 향상을 위한 이미지 전처리.
-    그레이스케일 → 크기 제한 → 이진화 순서로 처리합니다.
-    기울기 보정은 처리 시간이 길어 제외합니다.
-
-    Args:
-        image_bytes: 업로드된 이미지 바이트
-
-    Returns:
-        전처리된 OpenCV 이미지 배열 (numpy ndarray)
+    Claude API 클라이언트를 싱글턴 패턴으로 반환합니다.
+    ANTHROPIC_API_KEY 환경변수를 자동으로 참조합니다.
+    서버 시작 후 첫 OCR 요청 시 한 번만 초기화됩니다.
     """
-    # 바이트 → PIL → numpy 배열 변환
-    pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-    # 너무 큰 이미지는 OCR 속도 저하 → 최대 2000px로 축소
-    max_dim = 2000
-    w, h = pil_image.size
-    if max(w, h) > max_dim:
-        scale = max_dim / max(w, h)
-        pil_image = pil_image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
-
-    img_array = np.array(pil_image)
-
-    # BGR 변환 (OpenCV 기본 형식)
-    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-
-    # 그레이스케일 변환
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-
-    # 가우시안 블러로 노이즈 제거
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    # Otsu 이진화 (영수증처럼 흑백 대비가 높은 이미지에 적합, 속도 빠름)
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    return binary
-
-
-def _deskew(image: np.ndarray) -> np.ndarray:
-    """
-    이미지 기울기 감지 및 보정.
-    Hough 변환으로 기울기 각도를 추정합니다.
-
-    Args:
-        image: 이진화된 이미지
-
-    Returns:
-        기울기 보정된 이미지
-    """
-    try:
-        # 외곽선 추출
-        coords = np.column_stack(np.where(image > 0))
-        if len(coords) < 10:
-            return image
-
-        # 최소 외접 사각형으로 각도 추정
-        angle = cv2.minAreaRect(coords)[-1]
-
-        # 각도 범위 조정 (-45 ~ 45도)
-        if angle < -45:
-            angle = -(90 + angle)
-        else:
-            angle = -angle
-
-        # 미세한 기울기(0.5도 이하)는 무시
-        if abs(angle) < 0.5:
-            return image
-
-        # 회전 변환 행렬 계산 후 보정
-        h, w = image.shape[:2]
-        center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated = cv2.warpAffine(
-            image, M, (w, h),
-            flags=cv2.INTER_CUBIC,
-            borderMode=cv2.BORDER_REPLICATE
-        )
-        return rotated
-
-    except Exception as e:
-        logger.warning(f"기울기 보정 실패 (무시하고 원본 사용): {e}")
-        return image
+    global _claude_client
+    if _claude_client is None:
+        # 환경변수 ANTHROPIC_API_KEY를 자동으로 읽어 클라이언트 생성
+        _claude_client = anthropic.Anthropic()
+    return _claude_client
 
 
 # ─────────────────────────────────────────
-# OCR 실행
+# 상수 정의
 # ─────────────────────────────────────────
 
-def extract_text(image_bytes: bytes) -> str:
-    """
-    전처리된 이미지에서 Tesseract OCR로 텍스트를 추출합니다.
-    kor+eng 언어 모드를 사용합니다.
+# 지원 이미지 확장자 → MIME 타입 매핑
+# Claude Vision API가 인식할 수 있는 형식으로 변환합니다.
+MEDIA_TYPE_MAP = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".bmp": "image/jpeg",  # BMP는 JPEG로 처리 (Claude API 미지원)
+}
 
-    Args:
-        image_bytes: 업로드된 이미지 바이트
+# Claude에게 전달하는 영수증 파싱 프롬프트
+# JSON 외 텍스트를 일절 포함하지 않도록 강하게 지시합니다.
+RECEIPT_PROMPT = """이 영수증 이미지에서 정보를 추출해서 반드시 아래 JSON 형식으로만 응답해줘.
+JSON 외의 다른 텍스트는 절대 포함하지 마. 코드블록(```)도 사용하지 마.
 
-    Returns:
-        추출된 텍스트 문자열
-    """
-    try:
-        # 이미지 전처리
-        processed = preprocess_image(image_bytes)
-
-        # PIL 이미지로 변환 (pytesseract 입력 형식)
-        pil_image = Image.fromarray(processed)
-
-        # tessdata 경로를 환경 변수로 설정 (공백 포함 경로 대응)
-        os.environ["TESSDATA_PREFIX"] = TESSDATA_DIR
-
-        # Tesseract OCR 실행
-        # --oem 1: LSTM 신경망 모드 (--oem 3보다 빠름)
-        # --psm 6: 단일 균일 블록 텍스트로 가정
-        custom_config = "--psm 6 --oem 1"
-        text = pytesseract.image_to_string(
-            pil_image,
-            lang="kor+eng",
-            config=custom_config
-        )
-
-        logger.info(f"OCR 텍스트 추출 완료: {len(text)}자")
-        return text
-
-    except pytesseract.TesseractError as e:
-        logger.error(f"Tesseract OCR 오류: {e}")
-        raise RuntimeError(f"OCR 처리 중 오류가 발생했습니다: {str(e)}")
-    except Exception as e:
-        logger.error(f"이미지 처리 오류: {e}")
-        raise RuntimeError(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
-
-
-# ─────────────────────────────────────────
-# 텍스트 파싱
-# ─────────────────────────────────────────
-
-def parse_receipt(text: str) -> dict:
-    """
-    OCR 추출 텍스트에서 영수증/거래명세서 정보를 파싱합니다.
-    날짜, 거래처명, 품목 리스트, 합계 금액을 추출합니다.
-
-    Args:
-        text: OCR 추출 텍스트
-
-    Returns:
-        {
-          date: str (YYYY-MM-DD 또는 None),
-          vendor: str (거래처명 또는 None),
-          total_amount: float (합계 금액 또는 0),
-          items: [
-            {name, quantity, unit, unit_price, amount}
-          ]
-        }
-    """
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
-
-    date = _parse_date(lines)
-    vendor = _parse_vendor(lines)
-    total_amount = _parse_total_amount(lines)
-    items = _parse_items(lines)
-
-    return {
-        "date": date,
-        "vendor": vendor,
-        "total_amount": total_amount,
-        "items": items,
+{
+  "vendor_name": "업체명 (없으면 null)",
+  "business_number": "사업자번호 (없으면 null)",
+  "receipt_date": "YYYY-MM-DD 형식 날짜 (없으면 null)",
+  "receipt_time": "HH:MM 형식 시간 (없으면 null)",
+  "total_amount": 숫자만 (원 단위, 없으면 0),
+  "vat_amount": 숫자만 (부가세, 없으면 0),
+  "supply_amount": 숫자만 (공급가액, 없으면 0),
+  "payment_method": "카드 또는 현금 또는 계좌이체 또는 기타",
+  "card_number": "카드 끝 4자리 (없으면 null)",
+  "items": [
+    {
+      "name": "품목명",
+      "quantity": 숫자,
+      "unit_price": 숫자,
+      "amount": 숫자
     }
+  ],
+  "memo": "기타 특이사항 (없으면 null)"
+}
+
+규칙:
+- 날짜는 반드시 YYYY-MM-DD 형식으로 변환
+- 금액은 반드시 숫자만 (콤마, 원 기호, 공백 제외)
+- 품목이 없으면 items는 빈 배열 []
+- 확실하지 않은 값은 null로 표시
+"""
 
 
-def _parse_date(lines: list) -> Optional[str]:
+# ─────────────────────────────────────────
+# 핵심 OCR 함수
+# ─────────────────────────────────────────
+
+def extract_receipt_data(image_path: str) -> dict:
     """
-    텍스트에서 날짜를 추출합니다.
-    지원 형식: YYYY-MM-DD, YYYY.MM.DD, YYYY/MM/DD, YY-MM-DD 등
+    Claude Vision API를 사용하여 영수증 이미지에서 구조화된 데이터를 추출합니다.
+    기존 Tesseract OCR 대비 높은 인식률과 한국어 처리 정확도를 제공합니다.
+
+    처리 흐름:
+        이미지 파일 읽기 → base64 인코딩 → Claude API 호출 → JSON 파싱
+
+    Args:
+        image_path: 서버에 저장된 이미지 파일의 절대 경로
+
+    Returns:
+        성공 시:
+            {
+                vendor_name, business_number, receipt_date, receipt_time,
+                total_amount, vat_amount, supply_amount, payment_method,
+                card_number, items, memo
+            }
+        실패 시:
+            {"error": "사용자 메시지", "detail": "기술 상세 정보"}
     """
-    # 연-월-일 패턴 (우선순위: 4자리 연도)
-    patterns = [
-        r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})",  # YYYY-MM-DD / YYYY.MM.DD
-        r"(\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})",   # YY-MM-DD
-    ]
-    for pattern in patterns:
-        for line in lines:
-            m = re.search(pattern, line)
-            if m:
-                groups = m.groups()
-                year = groups[0] if len(groups[0]) == 4 else f"20{groups[0]}"
-                month = groups[1].zfill(2)
-                day = groups[2].zfill(2)
-                # 유효성 범위 간단 체크
-                if 1 <= int(month) <= 12 and 1 <= int(day) <= 31:
-                    return f"{year}-{month}-{day}"
-    return None
+    # 파일 존재 여부 확인 (잘못된 경로로 API 호출하는 낭비 방지)
+    if not os.path.exists(image_path):
+        logger.error(f"이미지 파일 없음: {image_path}")
+        return {"error": "이미지 파일을 찾을 수 없습니다.", "detail": image_path}
 
+    try:
+        # 이미지 바이트를 읽어 base64 문자열로 인코딩
+        # Claude Vision API는 바이너리가 아닌 base64 문자열을 요구합니다.
+        with open(image_path, "rb") as f:
+            image_data = base64.standard_b64encode(f.read()).decode("utf-8")
 
-def _parse_vendor(lines: list) -> Optional[str]:
-    """
-    텍스트에서 거래처명을 추출합니다.
-    상호명 패턴 또는 공급자 라벨 다음 줄에서 추출합니다.
-    """
-    # "상호", "공급자", "거래처", "업체" 키워드 다음 내용 추출
-    vendor_keywords = ["상호", "공급자", "거래처", "업체명", "판매처", "공급업체"]
-    for i, line in enumerate(lines):
-        for keyword in vendor_keywords:
-            if keyword in line:
-                # 같은 줄에 콜론(:) 뒤 내용 우선
-                colon_match = re.search(r"[:：]\s*(.+)", line)
-                if colon_match:
-                    candidate = colon_match.group(1).strip()
-                    if len(candidate) >= 2:
-                        return candidate
-                # 다음 줄에서 추출
-                if i + 1 < len(lines):
-                    next_line = lines[i + 1]
-                    # 숫자만 있거나 너무 짧은 줄은 제외
-                    if len(next_line) >= 2 and not re.match(r"^\d+$", next_line):
-                        return next_line
+        # 파일 확장자로 MIME 타입 결정 (기본값: image/jpeg)
+        ext = Path(image_path).suffix.lower()
+        media_type = MEDIA_TYPE_MAP.get(ext, "image/jpeg")
 
-    # 첫 번째 줄이 한글로 시작하고 2~20자이면 거래처명으로 추정
-    for line in lines[:5]:
-        if re.match(r"^[가-힣a-zA-Z\s]{2,20}$", line) and not any(
-            kw in line for kw in ["영수증", "거래명세서", "세금계산서", "합계", "소계"]
-        ):
-            return line
+        # Claude Vision API 호출
+        # max_tokens=1024: 영수증 JSON 응답에 충분한 토큰 수
+        client = _get_client()
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            # 이미지 블록: base64 인코딩된 이미지 데이터 전달
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": image_data,
+                            },
+                        },
+                        {
+                            # 텍스트 블록: 파싱 지시 프롬프트 전달
+                            "type": "text",
+                            "text": RECEIPT_PROMPT,
+                        },
+                    ],
+                }
+            ],
+        )
 
-    return None
+        # API 응답 텍스트 추출 (앞뒤 공백 제거)
+        response_text = message.content[0].text.strip()
+        logger.info(f"Claude OCR 응답 수신: {len(response_text)}자")
 
+        # JSON 파싱 시도
+        try:
+            receipt_data = json.loads(response_text)
+            return receipt_data
+        except json.JSONDecodeError as e:
+            # JSON 형식이 아닌 응답이 오면 raw 텍스트를 memo에 담아 반환
+            # 이 경우 사용자가 수동으로 확인하고 수정할 수 있습니다.
+            logger.warning(f"JSON 파싱 실패, raw 텍스트 반환: {e}")
+            return {
+                "vendor_name": None,
+                "business_number": None,
+                "receipt_date": None,
+                "receipt_time": None,
+                "total_amount": 0,
+                "vat_amount": 0,
+                "supply_amount": 0,
+                "payment_method": "기타",
+                "card_number": None,
+                "items": [],
+                "memo": f"[OCR 파싱 실패] {response_text[:500]}",
+            }
 
-def _parse_total_amount(lines: list) -> float:
-    """
-    텍스트에서 합계 금액을 추출합니다.
-    '합계', '총액', '총계', '공급가액' 키워드 근처의 금액을 파싱합니다.
-    """
-    # 합계 관련 키워드 (우선순위 순)
-    total_keywords = ["합  계", "합계", "총액", "총계", "공급가액합계", "청구금액", "결제금액", "total"]
-    exclude_keywords = ["공급가액", "부가세", "세액"]  # 합계가 아닌 항목 제외
-
-    best_amount = 0.0
-    for line in lines:
-        line_lower = line.lower()
-        # 합계 키워드가 포함된 줄에서 금액 추출
-        if any(kw in line for kw in total_keywords):
-            # 제외 키워드가 있으면 건너뜀
-            if any(ex in line for ex in exclude_keywords):
-                continue
-            amount = _extract_amount(line)
-            if amount and amount > best_amount:
-                best_amount = amount
-
-    # 합계를 못 찾으면 텍스트에서 가장 큰 금액 추출
-    if best_amount == 0:
-        amounts = []
-        for line in lines:
-            amt = _extract_amount(line)
-            if amt and amt > 0:
-                amounts.append(amt)
-        if amounts:
-            best_amount = max(amounts)
-
-    return best_amount
-
-
-def _extract_amount(text: str) -> Optional[float]:
-    """
-    문자열에서 금액(숫자)을 추출합니다.
-    쉼표, 원 기호 등을 처리합니다.
-    """
-    # 쉼표 포함 숫자 패턴 (예: 1,234,567 또는 1234567)
-    matches = re.findall(r"[\d,]+", text)
-    for m in reversed(matches):
-        clean = m.replace(",", "")
-        if len(clean) >= 3:  # 100원 이상만 금액으로 인식
-            try:
-                return float(clean)
-            except ValueError:
-                continue
-    return None
-
-
-def _parse_items(lines: list) -> list:
-    """
-    텍스트에서 품목 리스트를 파싱합니다.
-    품목명 / 수량 / 단위 / 단가 / 소계 형식의 행을 인식합니다.
-
-    반환 형식:
-    [{"name": str, "quantity": float, "unit": str, "unit_price": float, "amount": float}]
-    """
-    items = []
-    # 품목 행 인식: 한글/영문 품목명 + 숫자들이 포함된 행 패턴
-    # 예: "킹크랩 2 kg 45,000 90,000"
-    item_pattern = re.compile(
-        r"([가-힣a-zA-Z\s]{1,20})\s+(\d+(?:\.\d+)?)\s*(kg|g|개|병|박스|팩|set|SET|L|l|ea|EA)?\s*([0-9,]+)?\s*([0-9,]+)"
-    )
-
-    # "품명", "품목", "상품명" 이후 행부터 파싱 시작
-    start_parsing = False
-    stop_keywords = ["합계", "총계", "부가세", "세액", "합  계", "공급가액합계"]
-
-    for line in lines:
-        # 품목 목록 시작 감지
-        if any(kw in line for kw in ["품명", "품목", "상품명", "내역"]):
-            start_parsing = True
-            continue
-
-        # 합계 영역 도달 시 파싱 중지
-        if any(kw in line for kw in stop_keywords):
-            break
-
-        # 패턴 매칭으로 품목 추출
-        m = item_pattern.search(line)
-        if m:
-            name = m.group(1).strip()
-            # 너무 짧거나 숫자만 있는 이름 제외
-            if len(name) < 1 or re.match(r"^\d+$", name):
-                continue
-
-            try:
-                quantity = float(m.group(2))
-                unit = m.group(3) or "개"
-                # 단가, 소계 추출
-                raw_price = m.group(4) or "0"
-                raw_amount = m.group(5) or "0"
-                unit_price = float(raw_price.replace(",", ""))
-                amount = float(raw_amount.replace(",", ""))
-
-                # 단가가 없으면 소계로 추정
-                if unit_price == 0 and amount > 0 and quantity > 0:
-                    unit_price = amount / quantity
-
-                items.append({
-                    "name": name,
-                    "quantity": quantity,
-                    "unit": unit,
-                    "unit_price": unit_price,
-                    "amount": amount,
-                })
-            except (ValueError, ZeroDivisionError):
-                continue
-
-    # 패턴 매칭으로 품목을 찾지 못한 경우 — 간단한 줄 기반 파싱 시도
-    if not items:
-        items = _parse_items_simple(lines)
-
-    return items
-
-
-def _parse_items_simple(lines: list) -> list:
-    """
-    복잡한 패턴 매칭이 실패했을 때 사용하는 간단한 품목 파싱.
-    금액이 포함된 줄을 품목으로 추정합니다.
-    """
-    items = []
-    skip_keywords = ["합계", "총계", "소계", "부가세", "세액", "날짜", "거래처", "주소", "전화", "사업자"]
-
-    for line in lines:
-        # 제외 키워드 있는 줄 건너뜀
-        if any(kw in line for kw in skip_keywords):
-            continue
-
-        # 한글 품목명과 금액이 모두 있는 줄
-        has_korean = bool(re.search(r"[가-힣]", line))
-        amounts_in_line = re.findall(r"[\d,]{3,}", line)
-
-        if has_korean and amounts_in_line:
-            # 품목명 추출 (숫자, 특수문자 제거)
-            name_match = re.match(r"([가-힣a-zA-Z\s]+)", line)
-            if name_match:
-                name = name_match.group(1).strip()
-                if len(name) >= 1:
-                    # 마지막 숫자를 금액으로
-                    try:
-                        amount = float(amounts_in_line[-1].replace(",", ""))
-                        if amount > 0:
-                            items.append({
-                                "name": name,
-                                "quantity": 1.0,
-                                "unit": "개",
-                                "unit_price": amount,
-                                "amount": amount,
-                            })
-                    except ValueError:
-                        continue
-
-    return items
+    except anthropic.APIConnectionError as e:
+        # 인터넷 연결 또는 Anthropic 서버 접속 실패
+        logger.error(f"Claude API 연결 실패: {e}")
+        return {"error": "OCR 서버 연결에 실패했습니다.", "detail": str(e)}
+    except anthropic.AuthenticationError as e:
+        # ANTHROPIC_API_KEY가 없거나 잘못된 경우
+        logger.error(f"Claude API 인증 실패: {e}")
+        return {"error": "API 키 인증에 실패했습니다. ANTHROPIC_API_KEY를 확인해주세요.", "detail": str(e)}
+    except anthropic.RateLimitError as e:
+        # API 요청 횟수 한도 초과
+        logger.error(f"Claude API 요청 한도 초과: {e}")
+        return {"error": "API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.", "detail": str(e)}
+    except Exception as e:
+        # 그 외 예상치 못한 오류
+        logger.error(f"OCR 처리 중 예상치 못한 오류: {e}")
+        return {"error": "OCR 처리 중 오류가 발생했습니다.", "detail": str(e)}
 
 
 # ─────────────────────────────────────────
@@ -431,17 +210,25 @@ def _parse_items_simple(lines: list) -> list:
 
 def match_inventory_items(db: Session, items: list) -> list:
     """
-    OCR로 파싱한 품목 리스트를 기존 재고 품목과 매칭합니다.
-    문자열 포함 검색(부분 일치)으로 후보를 찾습니다.
+    OCR로 파싱한 품목 리스트를 기존 재고 품목과 퍼지 매칭합니다.
+    문자열 유사도 계산(부분 일치 + Jaccard + LCS)으로 후보를 찾습니다.
 
     Args:
         db: SQLAlchemy 세션
-        items: parse_receipt에서 반환된 품목 리스트
+        items: extract_receipt_data에서 반환된 items 리스트
+               [{"name": str, "quantity": num, "unit_price": num, "amount": num}, ...]
 
     Returns:
-        각 품목에 matched_inventory_id, matched_inventory_name 필드가 추가된 리스트
+        각 품목에 다음 필드가 추가된 리스트:
+        - matched_inventory_id: 매칭된 재고 품목 ID (없으면 None)
+        - matched_inventory_name: 매칭된 재고 품목명 (없으면 None)
+        - match_score: 유사도 점수 (0.0 ~ 1.0)
+        - apply_to_inventory: 재고 반영 기본값 (매칭 성공 시 True)
+        - unit: 단위 (Claude 응답에 없을 경우 기본값 "개")
     """
-    # 삭제되지 않은 전체 재고 품목 로드
+    import re
+
+    # 삭제되지 않은 전체 재고 품목을 한 번에 로드 (쿼리 최소화)
     all_inventory = db.query(InventoryItem).filter(
         InventoryItem.is_deleted == 0
     ).all()
@@ -451,21 +238,25 @@ def match_inventory_items(db: Session, items: list) -> list:
         name = item.get("name", "")
         matched_id = None
         matched_name = None
-        match_score = 0
+        match_score = 0.0
 
+        # 모든 재고 품목과 유사도를 비교해 가장 높은 것을 선택
         for inv in all_inventory:
             score = _calculate_similarity(name, inv.name)
-            if score > match_score and score >= 0.4:  # 40% 이상 유사도만 매칭
+            # 40% 이상 유사도인 경우에만 매칭 후보로 인정
+            if score > match_score and score >= 0.4:
                 match_score = score
                 matched_id = inv.id
                 matched_name = inv.name
 
         enriched_items.append({
             **item,
+            # Claude 응답에 unit 필드가 없을 수 있으므로 기본값 "개" 설정
+            "unit": item.get("unit", "개"),
             "matched_inventory_id": matched_id,
             "matched_inventory_name": matched_name,
             "match_score": round(match_score, 2),
-            # 재고 반영 여부 기본값 (매칭된 경우 True)
+            # 매칭 성공 시 재고 반영 기본값 True (사용자가 검토 후 변경 가능)
             "apply_to_inventory": matched_id is not None,
         })
 
@@ -474,60 +265,73 @@ def match_inventory_items(db: Session, items: list) -> list:
 
 def _calculate_similarity(ocr_name: str, inv_name: str) -> float:
     """
-    두 품목명의 유사도를 계산합니다.
-    1. 정확히 포함되면 1.0
-    2. 공통 글자 비율 기반 유사도
-    3. 형태소 단위 부분 매칭
+    OCR 인식 품목명과 재고 품목명의 유사도를 계산합니다.
+
+    계산 방식 (단계적 적용):
+    1. 정확히 같으면 1.0 (최고점)
+    2. 한쪽이 다른 쪽을 포함하면 0.7~1.0
+    3. Jaccard 유사도(0.5) + LCS 비율(0.5) 혼합 점수
 
     Args:
-        ocr_name: OCR 파싱 품목명
+        ocr_name: OCR 인식 품목명
         inv_name: 재고 품목명
 
     Returns:
-        0.0 ~ 1.0 유사도 점수
+        0.0 ~ 1.0 사이의 유사도 점수
     """
+    import re
+
+    # 공백 제거 후 소문자 변환 (비교 정규화)
     ocr_clean = re.sub(r"\s+", "", ocr_name).lower()
     inv_clean = re.sub(r"\s+", "", inv_name).lower()
 
     if not ocr_clean or not inv_clean:
         return 0.0
 
-    # 정확히 같으면 최고점
+    # 정확히 같은 경우 최고점
     if ocr_clean == inv_clean:
         return 1.0
 
-    # 포함 관계 체크 (한쪽이 다른 쪽을 포함)
+    # 포함 관계 체크: 한쪽이 다른 쪽을 완전히 포함하는 경우
+    # 예: "킹크랩다리" vs "킹크랩" — 길이 비율로 점수 조정
     if inv_clean in ocr_clean or ocr_clean in inv_clean:
-        # 길이 비율에 따라 점수 조정
         shorter = min(len(ocr_clean), len(inv_clean))
         longer = max(len(ocr_clean), len(inv_clean))
         return 0.7 + 0.3 * (shorter / longer)
 
-    # 공통 글자 수 기반 유사도 (Jaccard 유사도 응용)
+    # Jaccard 유사도: 공통 글자 집합 비율 계산
     ocr_chars = set(ocr_clean)
     inv_chars = set(inv_clean)
     intersection = len(ocr_chars & inv_chars)
     union = len(ocr_chars | inv_chars)
-
     if union == 0:
         return 0.0
-
     jaccard = intersection / union
 
-    # 2글자 이상 연속 공통 부분 문자열 보너스
+    # LCS(최장 공통 부분 문자열) 비율로 연속 공통 부분 보정
     lcs_bonus = _longest_common_substring_ratio(ocr_clean, inv_clean)
 
+    # Jaccard + LCS 혼합 (각 50% 가중치)
     return min(1.0, jaccard * 0.5 + lcs_bonus * 0.5)
 
 
 def _longest_common_substring_ratio(s1: str, s2: str) -> float:
     """
-    두 문자열의 최장 공통 부분 문자열 길이 비율 계산.
-    짧은 문자열 대비 LCS 길이 비율을 반환합니다.
+    두 문자열의 최장 공통 부분 문자열(LCS) 길이 비율을 계산합니다.
+    짧은 문자열 대비 LCS 길이 비율로 연속 글자 일치도를 측정합니다.
+
+    예: "킹크랩", "킹크랩다리" → LCS="킹크랩"(3) / min(3,5) = 1.0
+
+    Args:
+        s1, s2: 비교할 두 문자열
+
+    Returns:
+        0.0 ~ 1.0 사이의 LCS 비율
     """
     if not s1 or not s2:
         return 0.0
     m, n = len(s1), len(s2)
+    # 동적 프로그래밍으로 LCS 길이 계산 (O(m*n) 공간)
     dp = [[0] * (n + 1) for _ in range(m + 1)]
     max_len = 0
     for i in range(1, m + 1):
