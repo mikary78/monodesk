@@ -135,7 +135,7 @@ def extract_receipt_data(image_path: str) -> dict:
         # max_tokens=1024: 영수증 JSON 응답에 충분한 토큰 수
         client = _get_client()
         message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5",
             max_tokens=1024,
             messages=[
                 {
@@ -198,9 +198,17 @@ def extract_receipt_data(image_path: str) -> dict:
         # API 요청 횟수 한도 초과
         logger.error(f"Claude API 요청 한도 초과: {e}")
         return {"error": "API 요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.", "detail": str(e)}
+    except anthropic.NotFoundError as e:
+        # 잘못된 모델 이름 등 리소스 없음 오류
+        logger.error(f"Claude API 리소스 없음 (모델명 오류 가능성): {e}")
+        return {"error": "OCR 모델을 찾을 수 없습니다. 서버 설정을 확인해주세요.", "detail": str(e)}
+    except anthropic.BadRequestError as e:
+        # 이미지 형식 또는 요청 본문 오류
+        logger.error(f"Claude API 요청 오류 (이미지 형식 문제 가능성): {e}")
+        return {"error": "이미지를 처리할 수 없습니다. 다른 이미지를 시도해주세요.", "detail": str(e)}
     except Exception as e:
         # 그 외 예상치 못한 오류
-        logger.error(f"OCR 처리 중 예상치 못한 오류: {e}")
+        logger.error(f"OCR 처리 중 예상치 못한 오류: {type(e).__name__}: {e}")
         return {"error": "OCR 처리 중 오류가 발생했습니다.", "detail": str(e)}
 
 
