@@ -27,6 +27,52 @@ router = APIRouter()
 
 
 # ─────────────────────────────────────────
+# Claude API 연결 진단 엔드포인트
+# ─────────────────────────────────────────
+
+@router.get("/test-connection")
+def test_connection():
+    """
+    Claude API 연결 상태를 진단합니다.
+    브라우저에서 /api/ocr/test-connection 으로 접속해 결과를 확인합니다.
+
+    반환:
+    - api_key_loaded: ANTHROPIC_API_KEY 환경변수 로드 여부
+    - api_key_prefix: API 키 앞 12자 (실제 값 노출 방지)
+    - model_test: Claude API 호출 성공 여부
+    - error: 실패 시 오류 종류 및 메시지
+    """
+    import anthropic as _anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    result = {
+        "api_key_loaded": bool(api_key),
+        "api_key_prefix": api_key[:12] + "..." if api_key else "(없음)",
+        "model": "claude-sonnet-4-6",
+        "model_test": False,
+        "error": None,
+    }
+
+    if not api_key:
+        result["error"] = "ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다. backend/.env 파일을 확인하세요."
+        return result
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=10,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        result["model_test"] = True
+        result["response_preview"] = msg.content[0].text[:30]
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {str(e)}"
+
+    return result
+
+
+# ─────────────────────────────────────────
 # 발주 번호 생성 유틸
 # ─────────────────────────────────────────
 

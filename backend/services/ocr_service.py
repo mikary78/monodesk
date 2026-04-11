@@ -135,7 +135,7 @@ def extract_receipt_data(image_path: str) -> dict:
         # max_tokens=1024: 영수증 JSON 응답에 충분한 토큰 수
         client = _get_client()
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=1024,
             messages=[
                 {

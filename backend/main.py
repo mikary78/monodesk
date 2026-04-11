@@ -9,8 +9,9 @@ import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
-# .env 파일 로드 (ANTHROPIC_API_KEY 등 환경변수)
-load_dotenv()
+# .env 파일 로드 — 절대 경로로 지정해 서버 실행 위치에 관계없이 항상 찾도록 함
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(_ENV_PATH)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
