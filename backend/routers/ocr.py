@@ -52,16 +52,16 @@ async def scan_receipt(
     db: Session = Depends(get_db),
 ):
     """
-    영수증 또는 거래명세서 이미지를 업로드하여 OCR 처리합니다.
+    영수증 또는 거래명세서 이미지를 업로드하여 Claude Vision API로 OCR 처리합니다.
 
     처리 순서:
     1. 이미지 파일 저장 (uploads/receipts/)
-    2. OpenCV 전처리 (기울기 보정, 이진화)
-    3. Tesseract OCR 실행 (kor+eng)
-    4. 텍스트 파싱 (날짜, 거래처, 품목, 합계)
-    5. 기존 재고 품목과 퍼지 매칭
+    2. Claude Vision API 호출 (base64 인코딩 이미지 전달)
+    3. JSON 응답 파싱 (날짜, 거래처, 품목, 합계 등)
+    4. 기존 재고 품목과 퍼지 매칭
 
     ※ 이 단계에서는 DB 저장을 하지 않습니다. 사용자 검토용 데이터만 반환합니다.
+    ※ 2026-04-07: Tesseract OCR → Claude Vision API로 교체
     """
     # 이미지 바이트 읽기
     image_bytes = await file.read()
@@ -75,7 +75,7 @@ async def scan_receipt(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 이미지 저장 (미리보기용 경로 확보)
+    # 이미지 저장 (Claude API 호출에 파일 경로 사용, 미리보기용 경로 확보)
     try:
         image_path = save_receipt_image(
             image_bytes=image_bytes,
@@ -85,17 +85,20 @@ async def scan_receipt(
         logger.error(f"이미지 저장 실패: {e}")
         raise HTTPException(status_code=400, detail=f"이미지 저장 중 오류가 발생했습니다: {str(e)}")
 
-    # OCR 텍스트 추출 — blocking 작업을 스레드 풀에서 실행 (이벤트 루프 블록 방지)
-    try:
-        loop = asyncio.get_event_loop()
-        raw_text = await loop.run_in_executor(
-            ocr_service._ocr_executor,
-            ocr_service.extract_text,
-            image_bytes,
-        )
-    except RuntimeError as e:
-        logger.error(f"OCR 처리 실패: {e}")
-        # OCR 실패해도 이미지는 저장해 두고, 수동 입력 가능하도록 응답
+    # Claude Vision API로 영수증 데이터 추출
+    # extract_receipt_data는 blocking I/O이므로 스레드 풀에서 실행 (이벤트 루프 블록 방지)
+    # None을 전달하면 asyncio 기본 스레드 풀을 사용 (전용 풀 불필요)
+    loop = asyncio.get_event_loop()
+    ocr_result = await loop.run_in_executor(
+        None,  # 기본 스레드 풀 사용
+        ocr_service.extract_receipt_data,
+        image_path,  # 저장된 파일 경로 전달 (바이트 아님)
+    )
+
+    # OCR 오류 처리: "error" 키가 있으면 실패 응답 반환
+    # 이미지는 저장되어 있어 사용자가 수동 입력으로 이어갈 수 있습니다.
+    if "error" in ocr_result:
+        logger.error(f"OCR 처리 실패: {ocr_result.get('error')}")
         return OcrScanResponse(
             success=False,
             image_path=image_path,
@@ -104,24 +107,29 @@ async def scan_receipt(
             total_amount=0.0,
             items=[],
             raw_text=None,
-            error_message=f"OCR 처리에 실패했습니다. 수동으로 입력해주세요. ({str(e)})"
+            error_message=ocr_result.get("error", "OCR 처리에 실패했습니다.")
         )
 
-    # 텍스트 파싱 (날짜, 거래처, 품목, 합계)
-    try:
-        parsed = ocr_service.parse_receipt(raw_text)
-    except Exception as e:
-        logger.error(f"텍스트 파싱 실패: {e}")
-        parsed = {"date": None, "vendor": None, "total_amount": 0.0, "items": []}
+    # Claude 응답 필드 → 기존 스키마 필드명으로 매핑
+    # (기존 Tesseract 기반 parse_receipt 반환 구조와 동일하게 맞춤)
+    parsed = {
+        "date": ocr_result.get("receipt_date"),
+        "vendor": ocr_result.get("vendor_name"),
+        "total_amount": float(ocr_result.get("total_amount") or 0),
+        "vat": float(ocr_result.get("vat_amount") or 0),
+        "payment_method": ocr_result.get("payment_method", "카드"),
+        "items": ocr_result.get("items", []),
+        "memo": ocr_result.get("memo"),
+    }
 
-    # 재고 품목 매칭
+    # 재고 품목 매칭 (퍼지 매칭으로 기존 재고와 연결)
     try:
         matched_items = ocr_service.match_inventory_items(db, parsed.get("items", []))
     except Exception as e:
         logger.warning(f"재고 매칭 실패 (무시): {e}")
         matched_items = parsed.get("items", [])
 
-    # 품목 스키마 변환
+    # 품목 스키마 변환 (OcrItemResult 모델로 직렬화)
     item_results = []
     for item in matched_items:
         item_results.append(OcrItemResult(
@@ -143,7 +151,7 @@ async def scan_receipt(
         vendor=parsed.get("vendor"),
         total_amount=parsed.get("total_amount", 0.0),
         items=item_results,
-        raw_text=raw_text,
+        raw_text=None,  # Claude Vision API는 raw 텍스트를 별도로 반환하지 않음
         error_message=None,
     )
 

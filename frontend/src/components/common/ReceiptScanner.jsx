@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Upload, X, Scan, CheckCircle, AlertCircle,
-  Loader2, ChevronDown, Plus, Trash2, RefreshCw
+  Loader2, Plus, Trash2, RefreshCw, Camera
 } from "lucide-react";
 import { scanReceipt, confirmReceipt } from "../../api/ocrApi";
 import { fetchCategories } from "../../api/accountingApi";
@@ -62,6 +62,9 @@ const ReceiptScanner = ({ isOpen, onClose, onSuccess }) => {
   // 드래그 오버 상태
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // 카메라 촬영 전용 input ref (capture="environment" → 모바일 후면 카메라 직접 실행)
+  const cameraInputRef = useRef(null);
+  // 갤러리/파일 선택 전용 input ref (데스크톱 파일 탐색기 또는 모바일 갤러리)
   const fileInputRef = useRef(null);
 
   // ── 초기 데이터 로드 ──────────────────────────────────────
@@ -344,57 +347,91 @@ const ReceiptScanner = ({ isOpen, onClose, onSuccess }) => {
 
           {/* ── STEP 1: 이미지 업로드 ── */}
           {(step === "upload") && (
-            <div className="p-6 space-y-6">
-              {/* 드래그&드롭 영역 */}
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`
-                  border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors
-                  ${isDragOver ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400 hover:bg-slate-50"}
-                `}
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileInputChange}
-                />
-                {previewUrl ? (
-                  // 선택된 이미지 미리보기
-                  <div className="space-y-3">
-                    <img
-                      src={previewUrl}
-                      alt="영수증 미리보기"
-                      className="max-h-64 mx-auto rounded-lg shadow"
-                    />
-                    <p className="text-sm text-slate-500">{selectedFile?.name}</p>
-                    <p className="text-xs text-blue-500">클릭하여 다른 이미지 선택</p>
+            <div className="p-6 space-y-4">
+
+              {/* 이미지 선택 후: 미리보기 표시 */}
+              {previewUrl ? (
+                <div className="text-center space-y-3">
+                  <img
+                    src={previewUrl}
+                    alt="영수증 미리보기"
+                    className="max-h-72 mx-auto rounded-xl shadow-md border border-slate-200"
+                  />
+                  <p className="text-sm text-slate-500">{selectedFile?.name}</p>
+                  {/* 다시 선택 버튼 */}
+                  <button
+                    onClick={() => { setSelectedFile(null); setPreviewUrl(null); }}
+                    className="text-xs text-blue-500 hover:underline"
+                  >
+                    다시 선택
+                  </button>
+                </div>
+              ) : (
+                /* 이미지 미선택 시: 드래그&드롭 영역 (데스크톱 전용) */
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                    isDragOver ? "border-blue-500 bg-blue-50" : "border-slate-300 hover:border-blue-400"
+                  }`}
+                >
+                  <div className="w-16 h-16 mx-auto bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                    <Upload size={28} className="text-slate-400" />
                   </div>
-                ) : (
-                  // 빈 상태 안내
-                  <div className="space-y-3">
-                    <div className="w-16 h-16 mx-auto bg-slate-100 rounded-full flex items-center justify-center">
-                      <Upload size={28} className="text-slate-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">영수증 또는 거래명세서 이미지를 드래그하거나 클릭하세요</p>
-                      <p className="text-xs text-slate-400 mt-1">JPG, PNG, BMP, TIFF 지원 / 최대 20MB</p>
-                    </div>
-                  </div>
-                )}
+                  <p className="text-sm font-medium text-slate-700">이미지를 드래그하거나 아래 버튼으로 선택</p>
+                  <p className="text-xs text-slate-400 mt-1">JPG, PNG, WEBP 지원 / 최대 20MB</p>
+                </div>
+              )}
+
+              {/* 버튼 2개: 카메라 촬영 + 파일 선택 */}
+              <div className="grid grid-cols-2 gap-3">
+
+                {/* 카메라 촬영 버튼 (모바일: capture="environment"로 후면 카메라 직접 실행) */}
+                <div>
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleFileInputChange}
+                  />
+                  <button
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="w-full h-11 flex items-center justify-center gap-2 border-2 border-blue-300 rounded-xl text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    <Camera size={18} />
+                    카메라로 촬영
+                  </button>
+                </div>
+
+                {/* 갤러리/파일 선택 버튼 (데스크톱 파일 탐색기 또는 모바일 갤러리) */}
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileInputChange}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full h-11 flex items-center justify-center gap-2 border-2 border-slate-300 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <Upload size={18} />
+                    이미지 선택
+                  </button>
+                </div>
               </div>
 
-              {/* OCR 안내 문구 */}
+              {/* Claude AI OCR 안내 문구 */}
               <div className="bg-blue-50 rounded-lg p-4 text-sm text-blue-700 space-y-1">
-                <p className="font-medium">AI OCR 분석 안내</p>
+                <p className="font-medium">✨ Claude AI OCR 분석</p>
                 <ul className="list-disc list-inside space-y-0.5 text-blue-600 text-xs">
+                  <li>Claude AI가 영수증을 직접 이해해 정확하게 인식합니다.</li>
                   <li>인식된 정보는 저장 전 반드시 확인/수정하세요.</li>
-                  <li>품목별 재고 반영 여부를 직접 선택할 수 있습니다.</li>
-                  <li>OCR 인식률은 이미지 선명도에 따라 달라질 수 있습니다.</li>
+                  <li>모바일에서 카메라로 바로 촬영해 사용하세요.</li>
                 </ul>
               </div>
             </div>
@@ -405,8 +442,9 @@ const ReceiptScanner = ({ isOpen, onClose, onSuccess }) => {
             <div className="flex flex-col items-center justify-center py-24 gap-4">
               <Loader2 size={48} className="text-blue-500 animate-spin" />
               <div className="text-center">
-                <p className="text-base font-medium text-slate-700">AI가 영수증을 분석하고 있습니다...</p>
-                <p className="text-sm text-slate-400 mt-1">이미지 전처리 → OCR 텍스트 추출 → 정보 파싱</p>
+                {/* Claude Vision API 사용에 맞게 메시지 업데이트 */}
+                <p className="text-base font-medium text-slate-700">Claude AI가 영수증을 분석하고 있습니다...</p>
+                <p className="text-sm text-slate-400 mt-1">이미지 인식 → 텍스트 추출 → 데이터 구조화</p>
               </div>
             </div>
           )}

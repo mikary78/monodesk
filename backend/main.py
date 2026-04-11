@@ -6,7 +6,11 @@
 # ============================================================
 
 import os
+from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+
+# .env 파일 로드 (ANTHROPIC_API_KEY 등 환경변수)
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
