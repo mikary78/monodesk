@@ -3,6 +3,9 @@
 // FastAPI 백엔드 /api/ocr/* 엔드포인트와 통신합니다.
 // ============================================================
 
+// 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
+import { apiRequest } from "./apiClient";
+
 // 백엔드 서버 기본 URL (로컬 전용)
 const BASE_URL = "http://localhost:8000/api/ocr";
 
@@ -52,19 +55,12 @@ export async function scanReceipt(imageFile) {
   const formData = new FormData();
   formData.append("file", imageFile);
 
-  const response = await fetch(`${BASE_URL}/scan-receipt`, {
+  // apiRequest가 FormData를 감지하여 Content-Type을 자동으로 생략합니다.
+  // (브라우저가 multipart boundary를 자동으로 설정)
+  return apiRequest(`${BASE_URL}/scan-receipt`, {
     method: "POST",
-    // Content-Type 헤더를 명시하지 않음 — 브라우저가 multipart boundary 자동 처리
     body: formData,
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.detail || "OCR 처리 중 오류가 발생했습니다.";
-    throw new Error(message);
-  }
-
-  return response.json();
 }
 
 
@@ -89,17 +85,8 @@ export async function scanReceipt(imageFile) {
  * @returns {Promise<{success: boolean, expense_id: number, purchase_order_id: number|null, inventory_updated_count: number, message: string}>}
  */
 export async function confirmReceipt(data) {
-  const response = await fetch(`${BASE_URL}/confirm-receipt`, {
+  return apiRequest(`${BASE_URL}/confirm-receipt`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.detail || "저장 중 오류가 발생했습니다.";
-    throw new Error(message);
-  }
-
-  return response.json();
 }

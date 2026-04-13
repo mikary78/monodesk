@@ -14,6 +14,8 @@ from schemas.accounting import (
     ProfitLossResponse
 )
 import services.accounting_service as service
+from auth import require_role
+from models.auth import User
 
 # 라우터 인스턴스 생성
 router = APIRouter()
@@ -24,7 +26,10 @@ router = APIRouter()
 # ─────────────────────────────────────────
 
 @router.get("/categories", response_model=list[ExpenseCategoryResponse])
-def get_categories(db: Session = Depends(get_db)):
+def get_categories(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """
     지출 분류 목록 전체 조회.
     삭제되지 않은 모든 분류를 반환합니다.
@@ -33,7 +38,11 @@ def get_categories(db: Session = Depends(get_db)):
 
 
 @router.post("/categories", response_model=ExpenseCategoryResponse, status_code=201)
-def create_category(data: ExpenseCategoryCreate, db: Session = Depends(get_db)):
+def create_category(
+    data: ExpenseCategoryCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """지출 분류 새로 생성"""
     try:
         return service.create_category(db, data)
@@ -42,7 +51,12 @@ def create_category(data: ExpenseCategoryCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/categories/{category_id}", response_model=ExpenseCategoryResponse)
-def update_category(category_id: int, data: ExpenseCategoryUpdate, db: Session = Depends(get_db)):
+def update_category(
+    category_id: int,
+    data: ExpenseCategoryUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """지출 분류 정보 수정"""
     result = service.update_category(db, category_id, data)
     if not result:
@@ -51,7 +65,11 @@ def update_category(category_id: int, data: ExpenseCategoryUpdate, db: Session =
 
 
 @router.delete("/categories/{category_id}")
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """지출 분류 삭제 (소프트 삭제)"""
     success = service.delete_category(db, category_id)
     if not success:
@@ -70,7 +88,8 @@ def get_expenses(
     category_id: Optional[int] = Query(None, description="분류 필터"),
     skip: int = Query(0, ge=0, description="페이지 오프셋"),
     limit: int = Query(50, ge=1, le=200, description="페이지 크기"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     월별 지출 목록 조회.
@@ -85,7 +104,11 @@ def get_expenses(
 
 
 @router.get("/expenses/{expense_id}", response_model=ExpenseRecordResponse)
-def get_expense(expense_id: int, db: Session = Depends(get_db)):
+def get_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """지출 기록 단건 조회"""
     expense = service.get_expense_by_id(db, expense_id)
     if not expense:
@@ -94,7 +117,11 @@ def get_expense(expense_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/expenses", response_model=ExpenseRecordResponse, status_code=201)
-def create_expense(data: ExpenseRecordCreate, db: Session = Depends(get_db)):
+def create_expense(
+    data: ExpenseRecordCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """새 지출 기록 입력"""
     try:
         return service.create_expense(db, data)
@@ -103,7 +130,12 @@ def create_expense(data: ExpenseRecordCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/expenses/{expense_id}", response_model=ExpenseRecordResponse)
-def update_expense(expense_id: int, data: ExpenseRecordUpdate, db: Session = Depends(get_db)):
+def update_expense(
+    expense_id: int,
+    data: ExpenseRecordUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """지출 기록 수정"""
     result = service.update_expense(db, expense_id, data)
     if not result:
@@ -112,7 +144,11 @@ def update_expense(expense_id: int, data: ExpenseRecordUpdate, db: Session = Dep
 
 
 @router.delete("/expenses/{expense_id}")
-def delete_expense(expense_id: int, db: Session = Depends(get_db)):
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """지출 기록 삭제 (소프트 삭제)"""
     success = service.delete_expense(db, expense_id)
     if not success:
@@ -128,14 +164,19 @@ def delete_expense(expense_id: int, db: Session = Depends(get_db)):
 def get_sales(
     year: int = Query(..., ge=2020, le=2099),
     month: int = Query(..., ge=1, le=12),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """월별 매출 기록 목록 조회"""
     return service.get_sales_by_month(db, year, month)
 
 
 @router.post("/sales", response_model=SalesRecordResponse, status_code=201)
-def create_sales(data: SalesRecordCreate, db: Session = Depends(get_db)):
+def create_sales(
+    data: SalesRecordCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """매출 기록 입력"""
     try:
         return service.create_sales(db, data)
@@ -144,7 +185,12 @@ def create_sales(data: SalesRecordCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/sales/{sales_id}", response_model=SalesRecordResponse)
-def update_sales(sales_id: int, data: SalesRecordUpdate, db: Session = Depends(get_db)):
+def update_sales(
+    sales_id: int,
+    data: SalesRecordUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """매출 기록 수정"""
     result = service.update_sales(db, sales_id, data)
     if not result:
@@ -153,7 +199,11 @@ def update_sales(sales_id: int, data: SalesRecordUpdate, db: Session = Depends(g
 
 
 @router.delete("/sales/{sales_id}")
-def delete_sales(sales_id: int, db: Session = Depends(get_db)):
+def delete_sales(
+    sales_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """매출 기록 삭제 (소프트 삭제)"""
     success = service.delete_sales(db, sales_id)
     if not success:
@@ -169,7 +219,8 @@ def delete_sales(sales_id: int, db: Session = Depends(get_db)):
 def get_profit_loss(
     year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
     month: int = Query(..., ge=1, le=12, description="조회 월"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     월별 손익 현황 계산.
@@ -182,7 +233,10 @@ def get_profit_loss(
 
 
 @router.post("/seed-categories")
-def seed_categories(db: Session = Depends(get_db)):
-    """기본 지출 분류 데이터 초기화 (최초 설정 시 1회 사용)"""
+def seed_categories(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    """기본 지출 분류 데이터 초기화 (최초 설정 시 1회 사용) — admin 전용"""
     service.seed_default_categories(db)
     return {"success": True, "message": "기본 지출 분류가 생성되었습니다."}

@@ -3,7 +3,16 @@
 // 공지사항, 위생점검, 영업일 관리, 업무 체크리스트 API 연동
 // ============================================================
 
+// 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
+import { apiRequest } from "./apiClient";
+
 const BASE_URL = "http://localhost:8000/api/operations";
+
+/**
+ * 인증 헤더가 포함된 내부 요청 헬퍼
+ * operationsApi 내부에서만 사용합니다.
+ */
+const req = (url, options = {}) => apiRequest(url, options);
 
 // ─────────────────────────────────────────
 // 공지사항 API
@@ -17,7 +26,7 @@ export const fetchNotices = async ({ noticeType, skip = 0, limit = 50 } = {}) =>
   const params = new URLSearchParams({ skip, limit });
   if (noticeType) params.append("notice_type", noticeType);
 
-  const res = await fetch(`${BASE_URL}/notices?${params}`);
+  const res = await req(`${BASE_URL}/notices?${params}`);
   if (!res.ok) throw new Error("공지사항 목록을 불러오지 못했습니다.");
   return res.json();
 };
@@ -27,7 +36,7 @@ export const fetchNotices = async ({ noticeType, skip = 0, limit = 50 } = {}) =>
  * @param {number} noticeId - 공지사항 ID
  */
 export const fetchNoticeById = async (noticeId) => {
-  const res = await fetch(`${BASE_URL}/notices/${noticeId}`);
+  const res = await req(`${BASE_URL}/notices/${noticeId}`);
   if (!res.ok) throw new Error("공지사항을 불러오지 못했습니다.");
   return res.json();
 };
@@ -37,7 +46,7 @@ export const fetchNoticeById = async (noticeId) => {
  * @param {object} data - { title, content, notice_type, is_pinned, author }
  */
 export const createNotice = async (data) => {
-  const res = await fetch(`${BASE_URL}/notices`, {
+  const res = await req(`${BASE_URL}/notices`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -55,7 +64,7 @@ export const createNotice = async (data) => {
  * @param {object} data - 수정할 필드
  */
 export const updateNotice = async (noticeId, data) => {
-  const res = await fetch(`${BASE_URL}/notices/${noticeId}`, {
+  const res = await req(`${BASE_URL}/notices/${noticeId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -72,7 +81,7 @@ export const updateNotice = async (noticeId, data) => {
  * @param {number} noticeId - 공지사항 ID
  */
 export const deleteNotice = async (noticeId) => {
-  const res = await fetch(`${BASE_URL}/notices/${noticeId}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/notices/${noticeId}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "공지사항 삭제에 실패했습니다.");
@@ -94,7 +103,7 @@ export const fetchHygieneChecklists = async ({ checkType, category } = {}) => {
   if (checkType) params.append("check_type", checkType);
   if (category) params.append("category", category);
 
-  const res = await fetch(`${BASE_URL}/hygiene/checklists?${params}`);
+  const res = await req(`${BASE_URL}/hygiene/checklists?${params}`);
   if (!res.ok) throw new Error("위생 점검 항목을 불러오지 못했습니다.");
   return res.json();
 };
@@ -104,7 +113,7 @@ export const fetchHygieneChecklists = async ({ checkType, category } = {}) => {
  * @param {object} data - { item_name, check_type, category, sort_order }
  */
 export const createHygieneChecklist = async (data) => {
-  const res = await fetch(`${BASE_URL}/hygiene/checklists`, {
+  const res = await req(`${BASE_URL}/hygiene/checklists`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -122,7 +131,7 @@ export const createHygieneChecklist = async (data) => {
  * @param {object} data - 수정할 필드
  */
 export const updateHygieneChecklist = async (itemId, data) => {
-  const res = await fetch(`${BASE_URL}/hygiene/checklists/${itemId}`, {
+  const res = await req(`${BASE_URL}/hygiene/checklists/${itemId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -139,7 +148,7 @@ export const updateHygieneChecklist = async (itemId, data) => {
  * @param {number} itemId - 항목 ID
  */
 export const deleteHygieneChecklist = async (itemId) => {
-  const res = await fetch(`${BASE_URL}/hygiene/checklists/${itemId}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/hygiene/checklists/${itemId}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "위생 점검 항목 삭제에 실패했습니다.");
@@ -152,7 +161,7 @@ export const deleteHygieneChecklist = async (itemId) => {
  * @param {string} checkDate - YYYY-MM-DD
  */
 export const fetchHygieneRecords = async (checkDate) => {
-  const res = await fetch(`${BASE_URL}/hygiene/records?check_date=${checkDate}`);
+  const res = await req(`${BASE_URL}/hygiene/records?check_date=${checkDate}`);
   if (!res.ok) throw new Error("위생 점검 기록을 불러오지 못했습니다.");
   return res.json();
 };
@@ -162,7 +171,7 @@ export const fetchHygieneRecords = async (checkDate) => {
  * @param {object} data - { check_date, checklist_id, result, inspector, memo }
  */
 export const saveHygieneRecord = async (data) => {
-  const res = await fetch(`${BASE_URL}/hygiene/records`, {
+  const res = await req(`${BASE_URL}/hygiene/records`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -180,7 +189,7 @@ export const saveHygieneRecord = async (data) => {
  * @param {number} month - 월
  */
 export const fetchHygieneMonthlySummary = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/hygiene/monthly-summary?year=${year}&month=${month}`);
+  const res = await req(`${BASE_URL}/hygiene/monthly-summary?year=${year}&month=${month}`);
   if (!res.ok) throw new Error("위생 점검 월별 현황을 불러오지 못했습니다.");
   return res.json();
 };
@@ -189,7 +198,7 @@ export const fetchHygieneMonthlySummary = async (year, month) => {
  * 기본 위생 점검 항목 초기화
  */
 export const seedHygieneChecklists = async () => {
-  const res = await fetch(`${BASE_URL}/hygiene/seed`, { method: "POST" });
+  const res = await req(`${BASE_URL}/hygiene/seed`, { method: "POST" });
   if (!res.ok) throw new Error("위생 점검 항목 초기화에 실패했습니다.");
   return res.json();
 };
@@ -205,7 +214,7 @@ export const seedHygieneChecklists = async () => {
  * @param {number} month - 월
  */
 export const fetchBusinessDays = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/business-days?year=${year}&month=${month}`);
+  const res = await req(`${BASE_URL}/business-days?year=${year}&month=${month}`);
   if (!res.ok) throw new Error("영업일 목록을 불러오지 못했습니다.");
   return res.json();
 };
@@ -215,7 +224,7 @@ export const fetchBusinessDays = async (year, month) => {
  * @param {string} date - YYYY-MM-DD
  */
 export const fetchBusinessDay = async (date) => {
-  const res = await fetch(`${BASE_URL}/business-days/${date}`);
+  const res = await req(`${BASE_URL}/business-days/${date}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("영업일 기록을 불러오지 못했습니다.");
   return res.json();
@@ -226,7 +235,7 @@ export const fetchBusinessDay = async (date) => {
  * @param {object} data - { business_date, status, closed_reason, memo, target_sales, weather }
  */
 export const saveBusinessDay = async (data) => {
-  const res = await fetch(`${BASE_URL}/business-days`, {
+  const res = await req(`${BASE_URL}/business-days`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -243,7 +252,7 @@ export const saveBusinessDay = async (data) => {
  * @param {string} date - YYYY-MM-DD
  */
 export const deleteBusinessDay = async (date) => {
-  const res = await fetch(`${BASE_URL}/business-days/${date}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/business-days/${date}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "영업일 기록 삭제에 실패했습니다.");
@@ -257,7 +266,7 @@ export const deleteBusinessDay = async (date) => {
  * @param {number} month - 월
  */
 export const fetchBusinessMonthStats = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/business-days/monthly-stats?year=${year}&month=${month}`);
+  const res = await req(`${BASE_URL}/business-days/monthly-stats?year=${year}&month=${month}`);
   if (!res.ok) throw new Error("영업일 통계를 불러오지 못했습니다.");
   return res.json();
 };
@@ -273,7 +282,7 @@ export const fetchBusinessMonthStats = async (year, month) => {
  */
 export const fetchTaskChecklists = async (taskType) => {
   const params = taskType ? `?task_type=${taskType}` : "";
-  const res = await fetch(`${BASE_URL}/tasks/checklists${params}`);
+  const res = await req(`${BASE_URL}/tasks/checklists${params}`);
   if (!res.ok) throw new Error("업무 항목을 불러오지 못했습니다.");
   return res.json();
 };
@@ -283,7 +292,7 @@ export const fetchTaskChecklists = async (taskType) => {
  * @param {object} data - { task_name, task_type, role, sort_order }
  */
 export const createTaskChecklist = async (data) => {
-  const res = await fetch(`${BASE_URL}/tasks/checklists`, {
+  const res = await req(`${BASE_URL}/tasks/checklists`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -301,7 +310,7 @@ export const createTaskChecklist = async (data) => {
  * @param {object} data - 수정할 필드
  */
 export const updateTaskChecklist = async (taskId, data) => {
-  const res = await fetch(`${BASE_URL}/tasks/checklists/${taskId}`, {
+  const res = await req(`${BASE_URL}/tasks/checklists/${taskId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -318,7 +327,7 @@ export const updateTaskChecklist = async (taskId, data) => {
  * @param {number} taskId - 항목 ID
  */
 export const deleteTaskChecklist = async (taskId) => {
-  const res = await fetch(`${BASE_URL}/tasks/checklists/${taskId}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/tasks/checklists/${taskId}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "업무 항목 삭제에 실패했습니다.");
@@ -335,7 +344,7 @@ export const fetchTaskRecords = async (recordDate, taskType) => {
   const params = new URLSearchParams({ record_date: recordDate });
   if (taskType) params.append("task_type", taskType);
 
-  const res = await fetch(`${BASE_URL}/tasks/records?${params}`);
+  const res = await req(`${BASE_URL}/tasks/records?${params}`);
   if (!res.ok) throw new Error("업무 기록을 불러오지 못했습니다.");
   return res.json();
 };
@@ -345,7 +354,7 @@ export const fetchTaskRecords = async (recordDate, taskType) => {
  * @param {object} data - { record_date, task_id, is_done, completed_by, memo }
  */
 export const saveTaskRecord = async (data) => {
-  const res = await fetch(`${BASE_URL}/tasks/records`, {
+  const res = await req(`${BASE_URL}/tasks/records`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -361,7 +370,7 @@ export const saveTaskRecord = async (data) => {
  * 기본 업무 체크리스트 항목 초기화
  */
 export const seedTaskChecklists = async () => {
-  const res = await fetch(`${BASE_URL}/tasks/seed`, { method: "POST" });
+  const res = await req(`${BASE_URL}/tasks/seed`, { method: "POST" });
   if (!res.ok) throw new Error("업무 체크리스트 초기화에 실패했습니다.");
   return res.json();
 };
@@ -381,7 +390,7 @@ export const fetchVendors = async ({ category, search } = {}) => {
   if (search) params.append("search", search);
 
   const query = params.toString() ? `?${params}` : "";
-  const res = await fetch(`${BASE_URL}/vendors${query}`);
+  const res = await req(`${BASE_URL}/vendors${query}`);
   if (!res.ok) throw new Error("거래처 목록을 불러오지 못했습니다.");
   return res.json();
 };
@@ -391,7 +400,7 @@ export const fetchVendors = async ({ category, search } = {}) => {
  * @param {object} data - 거래처 정보
  */
 export const createVendor = async (data) => {
-  const res = await fetch(`${BASE_URL}/vendors`, {
+  const res = await req(`${BASE_URL}/vendors`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -409,7 +418,7 @@ export const createVendor = async (data) => {
  * @param {object} data - 수정할 필드
  */
 export const updateVendor = async (vendorId, data) => {
-  const res = await fetch(`${BASE_URL}/vendors/${vendorId}`, {
+  const res = await req(`${BASE_URL}/vendors/${vendorId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -426,7 +435,7 @@ export const updateVendor = async (vendorId, data) => {
  * @param {number} vendorId - 거래처 ID
  */
 export const deleteVendor = async (vendorId) => {
-  const res = await fetch(`${BASE_URL}/vendors/${vendorId}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/vendors/${vendorId}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "거래처 삭제에 실패했습니다.");
@@ -444,7 +453,7 @@ export const deleteVendor = async (vendorId) => {
  * @param {string} date - YYYY-MM-DD
  */
 export const getClosingByDate = async (date) => {
-  const res = await fetch(`${BASE_URL}/closing/${date}`);
+  const res = await req(`${BASE_URL}/closing/${date}`);
   if (!res.ok) throw new Error("시재 조회에 실패했습니다.");
   return res.json();
 };
@@ -454,7 +463,7 @@ export const getClosingByDate = async (date) => {
  * @param {object} data - DailyClosingCreate 필드
  */
 export const saveClosing = async (data) => {
-  const res = await fetch(`${BASE_URL}/closing`, {
+  const res = await req(`${BASE_URL}/closing`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -472,7 +481,7 @@ export const saveClosing = async (data) => {
  * @param {object} data - DailyClosingCreate 필드
  */
 export const updateClosing = async (id, data) => {
-  const res = await fetch(`${BASE_URL}/closing/${id}`, {
+  const res = await req(`${BASE_URL}/closing/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -490,7 +499,7 @@ export const updateClosing = async (id, data) => {
  * @param {number} month - 월
  */
 export const getClosingList = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/closing/list?year=${year}&month=${month}`);
+  const res = await req(`${BASE_URL}/closing/list?year=${year}&month=${month}`);
   if (!res.ok) throw new Error("시재 목록 조회에 실패했습니다.");
   return res.json();
 };
@@ -505,7 +514,7 @@ export const getClosingList = async (year, month) => {
  * @param {string} date - YYYY-MM-DD
  */
 export const getIssuesByDate = async (date) => {
-  const res = await fetch(`${BASE_URL}/issues?date=${date}`);
+  const res = await req(`${BASE_URL}/issues?date=${date}`);
   if (!res.ok) throw new Error("이슈 목록 조회에 실패했습니다.");
   return res.json();
 };
@@ -516,7 +525,7 @@ export const getIssuesByDate = async (date) => {
  * @param {number} month - 월
  */
 export const getIssuesList = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/issues/list?year=${year}&month=${month}`);
+  const res = await req(`${BASE_URL}/issues/list?year=${year}&month=${month}`);
   if (!res.ok) throw new Error("이슈 월별 목록 조회에 실패했습니다.");
   return res.json();
 };
@@ -526,7 +535,7 @@ export const getIssuesList = async (year, month) => {
  * @param {object} data - { issue_date, issue_type, content, action_taken, is_resolved }
  */
 export const createIssue = async (data) => {
-  const res = await fetch(`${BASE_URL}/issues`, {
+  const res = await req(`${BASE_URL}/issues`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -544,7 +553,7 @@ export const createIssue = async (data) => {
  * @param {object} data - { issue_type?, content?, action_taken?, is_resolved? }
  */
 export const updateIssue = async (id, data) => {
-  const res = await fetch(`${BASE_URL}/issues/${id}`, {
+  const res = await req(`${BASE_URL}/issues/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -561,7 +570,7 @@ export const updateIssue = async (id, data) => {
  * @param {number} id - 이슈 ID
  */
 export const deleteIssue = async (id) => {
-  const res = await fetch(`${BASE_URL}/issues/${id}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/issues/${id}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "이슈 삭제에 실패했습니다.");
@@ -578,7 +587,7 @@ export const deleteIssue = async (id) => {
  * 고정비 항목 목록 조회 (활성 항목만)
  */
 export const getFixedCostItems = async () => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/items`);
+  const res = await req(`${BASE_URL}/fixed-costs/items`);
   if (!res.ok) throw new Error("고정비 항목 조회에 실패했습니다.");
   return res.json();
 };
@@ -588,7 +597,7 @@ export const getFixedCostItems = async () => {
  * @param {object} data - { name, category, vendor_name, payment_day, default_amount, sort_order }
  */
 export const createFixedCostItem = async (data) => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/items`, {
+  const res = await req(`${BASE_URL}/fixed-costs/items`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -606,7 +615,7 @@ export const createFixedCostItem = async (data) => {
  * @param {object} data - 수정할 필드
  */
 export const updateFixedCostItem = async (id, data) => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/items/${id}`, {
+  const res = await req(`${BASE_URL}/fixed-costs/items/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -623,7 +632,7 @@ export const updateFixedCostItem = async (id, data) => {
  * @param {number} id - 항목 ID
  */
 export const deleteFixedCostItem = async (id) => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/items/${id}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/fixed-costs/items/${id}`, { method: "DELETE" });
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "고정비 항목 비활성화에 실패했습니다.");
@@ -642,7 +651,7 @@ export const deleteFixedCostItem = async (id) => {
  * @param {number} month - 월
  */
 export const getFixedCostMonthly = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/${year}/${month}`);
+  const res = await req(`${BASE_URL}/fixed-costs/${year}/${month}`);
   if (!res.ok) throw new Error("월별 고정비 조회에 실패했습니다.");
   return res.json();
 };
@@ -653,7 +662,7 @@ export const getFixedCostMonthly = async (year, month) => {
  * @param {object} data - { actual_amount?, payment_date?, memo? }
  */
 export const updateFixedCostRecord = async (id, data) => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/record/${id}`, {
+  const res = await req(`${BASE_URL}/fixed-costs/record/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -671,7 +680,7 @@ export const updateFixedCostRecord = async (id, data) => {
  * @param {number} month - 월
  */
 export const getFixedCostSummary = async (year, month) => {
-  const res = await fetch(`${BASE_URL}/fixed-costs/summary/${year}/${month}`);
+  const res = await req(`${BASE_URL}/fixed-costs/summary/${year}/${month}`);
   if (!res.ok) throw new Error("고정비 요약 조회에 실패했습니다.");
   return res.json();
 };

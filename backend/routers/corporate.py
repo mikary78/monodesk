@@ -16,9 +16,10 @@ from schemas.corporate import (
     ShareholderMeetingCreate, ShareholderMeetingUpdate, ShareholderMeetingResponse,
 )
 import services.corporate_service as service
+from auth import require_role
 
-# 라우터 인스턴스 생성
-router = APIRouter()
+# 라우터 인스턴스 생성 — admin 전용 (라우터 레벨 권한 적용)
+router = APIRouter(dependencies=[Depends(require_role("admin"))])
 
 
 # ─────────────────────────────────────────

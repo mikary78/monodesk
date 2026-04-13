@@ -21,6 +21,8 @@ from schemas.employee import (
     MonthlySalarySummary
 )
 import services.employee_service as service
+from auth import require_role
+from models.auth import User
 
 # 라우터 인스턴스 생성
 router = APIRouter()
@@ -38,18 +40,23 @@ os.makedirs(CONTRACT_DIR, exist_ok=True)
 @router.get("/employees", response_model=List[EmployeeResponse])
 def get_employees(
     include_resigned: bool = Query(False, description="퇴사자 포함 여부"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
-    직원 목록 조회.
+    직원 목록 조회 — admin/manager 전용.
     기본값으로 현직자만 반환합니다. include_resigned=true 시 퇴사자도 포함합니다.
     """
     return service.get_all_employees(db, include_resigned=include_resigned)
 
 
 @router.get("/employees/{employee_id}", response_model=EmployeeResponse)
-def get_employee(employee_id: int, db: Session = Depends(get_db)):
-    """직원 단건 조회"""
+def get_employee(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """직원 단건 조회 — admin/manager 전용"""
     employee = service.get_employee_by_id(db, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="해당 직원을 찾을 수 없습니다.")
@@ -57,8 +64,12 @@ def get_employee(employee_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/employees", response_model=EmployeeResponse, status_code=201)
-def create_employee(data: EmployeeCreate, db: Session = Depends(get_db)):
-    """새 직원 등록"""
+def create_employee(
+    data: EmployeeCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """새 직원 등록 — admin/manager 전용"""
     try:
         return service.create_employee(db, data)
     except Exception as e:
@@ -66,8 +77,13 @@ def create_employee(data: EmployeeCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/employees/{employee_id}", response_model=EmployeeResponse)
-def update_employee(employee_id: int, data: EmployeeUpdate, db: Session = Depends(get_db)):
-    """직원 정보 수정"""
+def update_employee(
+    employee_id: int,
+    data: EmployeeUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """직원 정보 수정 — admin/manager 전용"""
     result = service.update_employee(db, employee_id, data)
     if not result:
         raise HTTPException(status_code=404, detail="해당 직원을 찾을 수 없습니다.")
@@ -75,8 +91,12 @@ def update_employee(employee_id: int, data: EmployeeUpdate, db: Session = Depend
 
 
 @router.delete("/employees/{employee_id}")
-def delete_employee(employee_id: int, db: Session = Depends(get_db)):
-    """직원 삭제 (소프트 삭제)"""
+def delete_employee(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """직원 삭제 (소프트 삭제) — admin/manager 전용"""
     success = service.delete_employee(db, employee_id)
     if not success:
         raise HTTPException(status_code=404, detail="해당 직원을 찾을 수 없습니다.")
@@ -91,7 +111,8 @@ def delete_employee(employee_id: int, db: Session = Depends(get_db)):
 async def upload_contract(
     employee_id: int,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     근로계약서 파일 업로드.
@@ -134,7 +155,11 @@ async def upload_contract(
 
 
 @router.get("/employees/{employee_id}/contract")
-def download_contract(employee_id: int, db: Session = Depends(get_db)):
+def download_contract(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """근로계약서 파일 다운로드"""
     employee = service.get_employee_by_id(db, employee_id)
     if not employee:
@@ -150,7 +175,11 @@ def download_contract(employee_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/employees/{employee_id}/contract")
-def delete_contract(employee_id: int, db: Session = Depends(get_db)):
+def delete_contract(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """근로계약서 파일 삭제"""
     employee = service.get_employee_by_id(db, employee_id)
     if not employee:
@@ -172,7 +201,8 @@ def get_attendance(
     year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
     month: int = Query(..., ge=1, le=12, description="조회 월"),
     employee_id: Optional[int] = Query(None, description="직원 필터"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
 ):
     """
     월별 출퇴근 기록 목록 조회.
@@ -184,7 +214,8 @@ def get_attendance(
 @router.get("/attendance/calculate-hours")
 def calculate_hours(
     clock_in: str = Query(..., description="출근 시각 (HH:MM)"),
-    clock_out: str = Query(..., description="퇴근 시각 (HH:MM)")
+    clock_out: str = Query(..., description="퇴근 시각 (HH:MM)"),
+    _: User = Depends(require_role("admin", "manager", "staff")),
 ):
     """
     출퇴근 시각으로 근무시간/연장/야간 시간을 미리 계산합니다.
@@ -202,7 +233,8 @@ def calculate_hours(
 def get_monthly_attendance_calendar(
     year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
     month: int = Query(..., ge=1, le=12, description="조회 월"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
 ):
     """
     해당 월 전체 직원 근태 달력 데이터 반환.
@@ -216,7 +248,8 @@ def get_monthly_attendance_calendar(
 def update_attendance_status(
     attendance_id: int,
     status: str = Query(..., description="변경할 근무 상태값"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
 ):
     """
     daily_status만 수정하는 전용 엔드포인트.
@@ -229,7 +262,11 @@ def update_attendance_status(
 
 
 @router.post("/attendance", response_model=AttendanceRecordResponse, status_code=201)
-def create_attendance(data: AttendanceRecordCreate, db: Session = Depends(get_db)):
+def create_attendance(
+    data: AttendanceRecordCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
+):
     """
     출퇴근 기록 입력.
     출퇴근 시각이 모두 입력되면 근무시간을 자동 계산합니다.
@@ -250,7 +287,8 @@ def create_attendance(data: AttendanceRecordCreate, db: Session = Depends(get_db
 def update_attendance(
     attendance_id: int,
     data: AttendanceRecordUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
 ):
     """출퇴근 기록 수정 (시각 수정 시 근무시간 자동 재계산)"""
     result = service.update_attendance(db, attendance_id, data)
@@ -260,7 +298,11 @@ def update_attendance(
 
 
 @router.delete("/attendance/{attendance_id}")
-def delete_attendance(attendance_id: int, db: Session = Depends(get_db)):
+def delete_attendance(
+    attendance_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
+):
     """출퇴근 기록 삭제 (소프트 삭제)"""
     success = service.delete_attendance(db, attendance_id)
     if not success:
@@ -278,7 +320,8 @@ def delete_attendance(attendance_id: int, db: Session = Depends(get_db)):
 def get_salary_overview(
     year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
     month: int = Query(..., ge=1, le=12, description="조회 월"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     월별 전체 급여 현황 요약.
@@ -291,7 +334,11 @@ def get_salary_overview(
 
 
 @router.post("/salary/calculate", response_model=SalaryCalculationResult)
-def calculate_salary(data: SalaryCalculationRequest, db: Session = Depends(get_db)):
+def calculate_salary(
+    data: SalaryCalculationRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """
     직원의 월 급여를 계산합니다 (저장 없이 미리보기).
     출퇴근 기록 기반으로 기본급, 수당, 공제액, 실수령액을 계산합니다.
@@ -305,7 +352,11 @@ def calculate_salary(data: SalaryCalculationRequest, db: Session = Depends(get_d
 
 
 @router.post("/salary/save", response_model=SalaryRecordResponse)
-def save_salary(data: SalaryCalculationRequest, db: Session = Depends(get_db)):
+def save_salary(
+    data: SalaryCalculationRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
     """
     계산된 급여를 DB에 저장합니다.
     이미 해당 월 정산 기록이 있으면 업데이트합니다.
@@ -324,7 +375,8 @@ def get_salary_records(
     year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
     month: int = Query(..., ge=1, le=12, description="조회 월"),
     employee_id: Optional[int] = Query(None, description="직원 필터"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """월별 급여 정산 기록 조회"""
     return service.get_salary_records(db, year, month, employee_id)
@@ -333,7 +385,8 @@ def get_salary_records(
 @router.get("/salary/history")
 def get_salary_history(
     employee_id: int = Query(..., description="직원 ID"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     특정 직원의 전체 급여 지급 이력 조회.
@@ -350,7 +403,8 @@ def get_salary_history(
 def update_salary_record(
     salary_id: int,
     data: SalaryRecordUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """급여 정산 기록 수정 (지급 완료 처리 등)"""
     result = service.update_salary_record(db, salary_id, data)

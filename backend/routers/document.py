@@ -10,8 +10,10 @@ from typing import Optional
 from database import get_db
 from schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse
 import services.document_service as doc_svc
+from auth import require_role
 
-router = APIRouter()
+# 라우터 인스턴스 생성 — admin 전용 (라우터 레벨 권한 적용)
+router = APIRouter(dependencies=[Depends(require_role("admin"))])
 
 
 @router.get("", response_model=list[DocumentResponse])
