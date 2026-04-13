@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from database import create_tables, run_migrations
-from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations, ocr, document
+from routers import accounting, sales_analysis, inventory, menu, employee, dashboard, corporate, operations, ocr, document, auth as auth_router
 
 # 프론트엔드 빌드 결과물 경로 (frontend/dist)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,6 +52,8 @@ app.add_middleware(
 )
 
 # API 라우터 등록 (/api/* 경로)
+# 인증 라우터 — 로그인/계정 관리 (prefix: /api/auth)
+app.include_router(auth_router.router, prefix="/api/auth", tags=["인증"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["대시보드"])
 app.include_router(accounting.router, prefix="/api/accounting", tags=["세무/회계"])
 app.include_router(sales_analysis.router, prefix="/api/sales-analysis", tags=["매출 분석"])

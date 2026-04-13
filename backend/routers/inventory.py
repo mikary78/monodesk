@@ -21,9 +21,10 @@ from schemas.inventory import (
     PurchaseSummaryResponse,  # 매입 출처별 집계 응답 스키마
 )
 import services.inventory_service as service
+from auth import require_role
 
-# 라우터 인스턴스 생성
-router = APIRouter()
+# 라우터 인스턴스 생성 — admin/manager 전용 (라우터 레벨 권한 적용)
+router = APIRouter(dependencies=[Depends(require_role("admin", "manager"))])
 
 
 # ─────────────────────────────────────────

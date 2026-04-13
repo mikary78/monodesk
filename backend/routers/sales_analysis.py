@@ -18,9 +18,10 @@ from schemas.sales_analysis import (
     AiInsightRequest, AiInsightResponse,
 )
 import services.sales_analysis_service as service
+from auth import require_role
 
-# 라우터 인스턴스 생성
-router = APIRouter()
+# 라우터 인스턴스 생성 — admin/manager 전용 (라우터 레벨 권한 적용)
+router = APIRouter(dependencies=[Depends(require_role("admin", "manager"))])
 
 # CSV/Excel 업로드 허용 파일 크기 (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024

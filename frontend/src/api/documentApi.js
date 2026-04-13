@@ -3,7 +3,15 @@
 // 지결서·회의록 CRUD 관련 백엔드 API를 호출합니다.
 // ============================================================
 
-const BASE = "/api/documents";
+// 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
+import { apiRequest } from "./apiClient";
+
+const BASE = "http://localhost:8000/api/documents";
+
+/**
+ * 인증 헤더가 포함된 내부 요청 헬퍼
+ */
+const req = (url, options = {}) => apiRequest(url, options);
 
 // ── 목록 조회 ──────────────────────────────────────────────
 /**
@@ -17,7 +25,7 @@ export async function fetchDocuments(params = {}) {
   if (params.skip)     query.set("skip",     params.skip);
   if (params.limit)    query.set("limit",    params.limit);
 
-  const res = await fetch(`${BASE}?${query.toString()}`);
+  const res = await req(`${BASE}?${query.toString()}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -28,7 +36,7 @@ export async function fetchDocuments(params = {}) {
  * @param {number} id - 문서 ID
  */
 export async function fetchDocument(id) {
-  const res = await fetch(`${BASE}/${id}`);
+  const res = await req(`${BASE}/${id}`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -39,7 +47,7 @@ export async function fetchDocument(id) {
  * @param {Object} data - DocumentCreate 스키마에 맞는 데이터
  */
 export async function createDocument(data) {
-  const res = await fetch(BASE, {
+  const res = await req(BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -55,7 +63,7 @@ export async function createDocument(data) {
  * @param {Object} data - 수정할 필드
  */
 export async function updateDocument(id, data) {
-  const res = await fetch(`${BASE}/${id}`, {
+  const res = await req(`${BASE}/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -70,7 +78,7 @@ export async function updateDocument(id, data) {
  * @param {number} id - 문서 ID
  */
 export async function deleteDocument(id) {
-  const res = await fetch(`${BASE}/${id}`, { method: "DELETE" });
+  const res = await req(`${BASE}/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

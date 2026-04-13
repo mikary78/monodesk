@@ -3,30 +3,11 @@
 // FastAPI 백엔드 /api/dashboard 엔드포인트와 통신합니다.
 // ============================================================
 
+// 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
+import { apiRequest as request } from "./apiClient";
+
 // 백엔드 서버 기본 URL (로컬 전용)
 const BASE_URL = "http://localhost:8000/api/dashboard";
-
-/**
- * API 요청 공통 처리 함수.
- * 에러 메시지를 한국어로 처리합니다.
- * @param {string} url - 요청 URL
- * @param {object} options - fetch 옵션
- * @returns {Promise<any>} 응답 데이터
- */
-async function request(url, options = {}) {
-  const defaultOptions = {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  };
-  const response = await fetch(url, defaultOptions);
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message =
-      errorData.detail || "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-    throw new Error(message);
-  }
-  return response.json();
-}
 
 // ─────────────────────────────────────────
 // 대시보드 통합 API

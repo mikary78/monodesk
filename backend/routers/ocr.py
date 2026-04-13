@@ -19,10 +19,13 @@ from models.inventory import InventoryItem, InventoryAdjustment, PurchaseOrder, 
 
 import services.ocr_service as ocr_service
 from utils.file_upload import save_receipt_image, validate_image_file, PROJECT_ROOT
+from auth import require_role
+from models.auth import User
 
 logger = logging.getLogger(__name__)
 
 # 라우터 인스턴스 생성
+# 참고: test-connection은 인증 없이 접근 가능 (엔드포인트에서 별도 처리)
 router = APIRouter()
 
 
@@ -97,6 +100,7 @@ def _generate_order_number(db: Session) -> str:
 async def scan_receipt(
     file: UploadFile = File(..., description="영수증/거래명세서 이미지 파일"),
     db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     영수증 또는 거래명세서 이미지를 업로드하여 Claude Vision API로 OCR 처리합니다.
@@ -217,6 +221,7 @@ async def scan_receipt(
 def confirm_receipt(
     data: OcrConfirmRequest,
     db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
 ):
     """
     사용자가 검토/수정한 영수증 데이터를 두 곳에 동시 저장합니다.

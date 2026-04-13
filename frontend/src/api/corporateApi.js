@@ -3,7 +3,17 @@
 // FastAPI /api/corporate 엔드포인트와 통신합니다.
 // ============================================================
 
+// 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
+import { apiRequest } from "./apiClient";
+
 const BASE_URL = "http://localhost:8000/api/corporate";
+
+/**
+ * 인증 헤더가 포함된 내부 요청 헬퍼 (JSON 응답 전용)
+ * @param {string} url - 요청 URL
+ * @param {object} options - fetch 옵션
+ */
+const req = (url, options = {}) => apiRequest(url, options);
 
 // ─────────────────────────────────────────
 // 동업자 관리 API
@@ -13,7 +23,7 @@ const BASE_URL = "http://localhost:8000/api/corporate";
  * 동업자 목록 전체 조회
  */
 export const fetchPartners = async () => {
-  const res = await fetch(`${BASE_URL}/partners`);
+  const res = await req(`${BASE_URL}/partners`);
   if (!res.ok) throw new Error("동업자 목록을 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -23,7 +33,7 @@ export const fetchPartners = async () => {
  * @param {number} partnerId
  */
 export const fetchPartnerById = async (partnerId) => {
-  const res = await fetch(`${BASE_URL}/partners/${partnerId}`);
+  const res = await req(`${BASE_URL}/partners/${partnerId}`);
   if (!res.ok) throw new Error("동업자 정보를 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -33,7 +43,7 @@ export const fetchPartnerById = async (partnerId) => {
  * @param {Object} data - { name, equity_ratio, phone, email, bank_name, bank_account, role, investment_amount, memo }
  */
 export const createPartner = async (data) => {
-  const res = await fetch(`${BASE_URL}/partners`, {
+  const res = await req(`${BASE_URL}/partners`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -51,7 +61,7 @@ export const createPartner = async (data) => {
  * @param {Object} data
  */
 export const updatePartner = async (partnerId, data) => {
-  const res = await fetch(`${BASE_URL}/partners/${partnerId}`, {
+  const res = await req(`${BASE_URL}/partners/${partnerId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -68,7 +78,7 @@ export const updatePartner = async (partnerId, data) => {
  * @param {number} partnerId
  */
 export const deletePartner = async (partnerId) => {
-  const res = await fetch(`${BASE_URL}/partners/${partnerId}`, {
+  const res = await req(`${BASE_URL}/partners/${partnerId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("동업자 삭제에 실패했습니다.");
@@ -79,7 +89,7 @@ export const deletePartner = async (partnerId) => {
  * 기본 동업자 4명 초기 등록 (최초 설정용)
  */
 export const seedPartners = async () => {
-  const res = await fetch(`${BASE_URL}/partners/seed`, { method: "POST" });
+  const res = await req(`${BASE_URL}/partners/seed`, { method: "POST" });
   if (!res.ok) throw new Error("기본 동업자 등록에 실패했습니다.");
   return res.json();
 };
@@ -94,7 +104,7 @@ export const seedPartners = async () => {
  * @param {Object} data - { year, annual_net_profit, distribution_ratio }
  */
 export const simulateDividend = async (data) => {
-  const res = await fetch(`${BASE_URL}/dividend/simulate`, {
+  const res = await req(`${BASE_URL}/dividend/simulate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -111,7 +121,7 @@ export const simulateDividend = async (data) => {
  * @param {Object} data - { year, annual_net_profit, distribution_ratio }
  */
 export const confirmDividend = async (data) => {
-  const res = await fetch(`${BASE_URL}/dividend/confirm`, {
+  const res = await req(`${BASE_URL}/dividend/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -128,7 +138,7 @@ export const confirmDividend = async (data) => {
  * @param {number} year
  */
 export const fetchDividendRecords = async (year) => {
-  const res = await fetch(`${BASE_URL}/dividend?year=${year}`);
+  const res = await req(`${BASE_URL}/dividend?year=${year}`);
   if (!res.ok) throw new Error("배당 기록을 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -139,7 +149,7 @@ export const fetchDividendRecords = async (year) => {
  * @param {Object} data - { is_paid, paid_date, memo }
  */
 export const updateDividendRecord = async (recordId, data) => {
-  const res = await fetch(`${BASE_URL}/dividend/${recordId}`, {
+  const res = await req(`${BASE_URL}/dividend/${recordId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -153,7 +163,7 @@ export const updateDividendRecord = async (recordId, data) => {
  * @param {number} year
  */
 export const deleteDividendRecordsByYear = async (year) => {
-  const res = await fetch(`${BASE_URL}/dividend/${year}`, { method: "DELETE" });
+  const res = await req(`${BASE_URL}/dividend/${year}`, { method: "DELETE" });
   if (!res.ok) throw new Error("배당 기록 삭제에 실패했습니다.");
   return res.json();
 };
@@ -172,7 +182,7 @@ export const fetchCorporateExpenses = async ({ year, month, category, skip = 0, 
   if (month) params.append("month", month);
   if (category) params.append("category", category);
 
-  const res = await fetch(`${BASE_URL}/expenses?${params}`);
+  const res = await req(`${BASE_URL}/expenses?${params}`);
   if (!res.ok) throw new Error("법인 비용 목록을 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -182,7 +192,7 @@ export const fetchCorporateExpenses = async ({ year, month, category, skip = 0, 
  * @param {number} expenseId
  */
 export const fetchCorporateExpenseById = async (expenseId) => {
-  const res = await fetch(`${BASE_URL}/expenses/${expenseId}`);
+  const res = await req(`${BASE_URL}/expenses/${expenseId}`);
   if (!res.ok) throw new Error("법인 비용을 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -192,7 +202,7 @@ export const fetchCorporateExpenseById = async (expenseId) => {
  * @param {Object} data - { expense_date, category, description, vendor?, amount, payment_method?, is_recurring?, memo? }
  */
 export const createCorporateExpense = async (data) => {
-  const res = await fetch(`${BASE_URL}/expenses`, {
+  const res = await req(`${BASE_URL}/expenses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -210,7 +220,7 @@ export const createCorporateExpense = async (data) => {
  * @param {Object} data
  */
 export const updateCorporateExpense = async (expenseId, data) => {
-  const res = await fetch(`${BASE_URL}/expenses/${expenseId}`, {
+  const res = await req(`${BASE_URL}/expenses/${expenseId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -224,7 +234,7 @@ export const updateCorporateExpense = async (expenseId, data) => {
  * @param {number} expenseId
  */
 export const deleteCorporateExpense = async (expenseId) => {
-  const res = await fetch(`${BASE_URL}/expenses/${expenseId}`, {
+  const res = await req(`${BASE_URL}/expenses/${expenseId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("법인 비용 삭제에 실패했습니다.");
@@ -241,7 +251,7 @@ export const deleteCorporateExpense = async (expenseId) => {
  * @param {number} year
  */
 export const fetchCorporateOverview = async (year) => {
-  const res = await fetch(`${BASE_URL}/overview?year=${year}`);
+  const res = await req(`${BASE_URL}/overview?year=${year}`);
   if (!res.ok) throw new Error("법인 재무 개요를 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -258,7 +268,7 @@ export const fetchCorporateOverview = async (year) => {
  */
 export const fetchMeetings = async ({ skip = 0, limit = 50 } = {}) => {
   const params = new URLSearchParams({ skip, limit });
-  const res = await fetch(`${BASE_URL}/meetings?${params}`);
+  const res = await req(`${BASE_URL}/meetings?${params}`);
   if (!res.ok) throw new Error("의사록 목록을 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -268,7 +278,7 @@ export const fetchMeetings = async ({ skip = 0, limit = 50 } = {}) => {
  * @param {number} meetingId
  */
 export const fetchMeetingById = async (meetingId) => {
-  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`);
+  const res = await req(`${BASE_URL}/meetings/${meetingId}`);
   if (!res.ok) throw new Error("의사록을 불러오는 데 실패했습니다.");
   return res.json();
 };
@@ -278,7 +288,7 @@ export const fetchMeetingById = async (meetingId) => {
  * @param {Object} data - { meeting_date, meeting_type, title, location?, agenda?, resolution?, attendees_json?, status?, created_by? }
  */
 export const createMeeting = async (data) => {
-  const res = await fetch(`${BASE_URL}/meetings`, {
+  const res = await req(`${BASE_URL}/meetings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -296,7 +306,7 @@ export const createMeeting = async (data) => {
  * @param {Object} data
  */
 export const updateMeeting = async (meetingId, data) => {
-  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+  const res = await req(`${BASE_URL}/meetings/${meetingId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -313,7 +323,7 @@ export const updateMeeting = async (meetingId, data) => {
  * @param {number} meetingId
  */
 export const deleteMeeting = async (meetingId) => {
-  const res = await fetch(`${BASE_URL}/meetings/${meetingId}`, {
+  const res = await req(`${BASE_URL}/meetings/${meetingId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("의사록 삭제에 실패했습니다.");
@@ -326,7 +336,7 @@ export const deleteMeeting = async (meetingId) => {
  * @param {number} year - 배당 결의 연도
  */
 export const generateMeetingDraftFromDividend = async (year) => {
-  const res = await fetch(`${BASE_URL}/meetings/draft-from-dividend/${year}`, {
+  const res = await req(`${BASE_URL}/meetings/draft-from-dividend/${year}`, {
     method: "POST",
   });
   if (!res.ok) {

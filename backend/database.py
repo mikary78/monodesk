@@ -135,4 +135,5 @@ def create_tables():
     import models.corporate   # noqa: F401 — 법인 관리 모델
     import models.operations  # noqa: F401 — 운영 관리 모델
     import models.document    # noqa: F401 — 문서 관리 모델 (지결서·회의록)
+    import models.auth        # noqa: F401 — 사용자 인증 모델 (로그인 계정)
     Base.metadata.create_all(bind=engine)

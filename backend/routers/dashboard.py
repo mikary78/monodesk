@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from database import get_db
 from schemas.dashboard import DashboardResponse, DailyKpiResponse, WeeklyKpiResponse, MonthlyKpiResponse
 import services.dashboard_service as service
+from auth import require_role
 
-# 라우터 인스턴스 생성
-router = APIRouter()
+# 라우터 인스턴스 생성 — admin/manager 전용 (라우터 레벨 권한 적용)
+router = APIRouter(dependencies=[Depends(require_role("admin", "manager"))])
 
 
 @router.get("/summary", response_model=DashboardResponse)
