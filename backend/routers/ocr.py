@@ -7,6 +7,7 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -18,7 +19,7 @@ from models.accounting import ExpenseRecord, ExpenseCategory
 from models.inventory import InventoryItem, InventoryAdjustment, PurchaseOrder, PurchaseOrderItem
 
 import services.ocr_service as ocr_service
-from utils.file_upload import save_receipt_image, validate_image_file, PROJECT_ROOT
+from utils.file_upload import save_receipt_image, validate_image_file
 from auth import require_role
 from models.auth import User
 
@@ -140,10 +141,13 @@ async def scan_receipt(
     # extract_receipt_data는 blocking I/O이므로 스레드 풀에서 실행 (이벤트 루프 블록 방지)
     # None을 전달하면 asyncio 기본 스레드 풀을 사용 (전용 풀 불필요)
     #
-    # image_path는 PROJECT_ROOT 기준 상대 경로이므로,
-    # OCR 서비스에 전달할 때 절대 경로로 변환한다.
-    # (서버 실행 디렉터리가 backend/이면 상대 경로로 파일을 찾지 못함)
-    absolute_image_path = os.path.join(PROJECT_ROOT, image_path)
+    # image_path는 프로젝트 루트 기준 상대 경로 (예: uploads/receipts/YYYY-MM-DD/xxx.png)
+    # 이 파일은 backend/routers/ocr.py 이므로:
+    #   Path(__file__).parent        → backend/routers/
+    #   Path(__file__).parent.parent → backend/
+    #   Path(__file__).parent.parent.parent → MonoDesk/ (프로젝트 루트)
+    BASE_DIR = Path(__file__).parent.parent.parent
+    absolute_image_path = str(BASE_DIR / image_path)
 
     loop = asyncio.get_event_loop()
     ocr_result = await loop.run_in_executor(
