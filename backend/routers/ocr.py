@@ -159,7 +159,11 @@ async def scan_receipt(
     # OCR 오류 처리: "error" 키가 있으면 실패 응답 반환
     # 이미지는 저장되어 있어 사용자가 수동 입력으로 이어갈 수 있습니다.
     if "error" in ocr_result:
-        logger.error(f"OCR 처리 실패: {ocr_result.get('error')}")
+        error_msg = ocr_result.get("error", "OCR 처리에 실패했습니다.")
+        error_detail = ocr_result.get("detail", "")
+        # 상세 오류를 함께 로깅 및 응답에 포함 (디버깅용)
+        logger.error(f"OCR 처리 실패: {error_msg} | 상세: {error_detail}")
+        full_message = f"{error_msg} | 상세: {error_detail[:200]}" if error_detail else error_msg
         return OcrScanResponse(
             success=False,
             image_path=image_path,
@@ -168,7 +172,7 @@ async def scan_receipt(
             total_amount=0.0,
             items=[],
             raw_text=None,
-            error_message=ocr_result.get("error", "OCR 처리에 실패했습니다.")
+            error_message=full_message
         )
 
     # Claude 응답 필드 → 기존 스키마 필드명으로 매핑
