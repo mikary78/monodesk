@@ -203,7 +203,14 @@ def extract_receipt_data(image_path: str) -> dict:
         logger.error(f"Claude API 리소스 없음 (모델명 오류 가능성): {e}")
         return {"error": "OCR 모델을 찾을 수 없습니다. 서버 설정을 확인해주세요.", "detail": str(e)}
     except anthropic.BadRequestError as e:
-        # 이미지 형식 또는 요청 본문 오류
+        # 크레딧 부족과 이미지 형식 오류를 구분해 사용자에게 정확한 메시지 전달
+        error_str = str(e).lower()
+        if "credit balance" in error_str or "balance is too low" in error_str:
+            logger.error(f"Claude API 크레딧 부족: {e}")
+            return {
+                "error": "Anthropic API 크레딧이 부족합니다. console.anthropic.com → Plans & Billing에서 충전해주세요.",
+                "detail": str(e),
+            }
         logger.error(f"Claude API 요청 오류 (이미지 형식 문제 가능성): {e}")
         return {"error": "이미지를 처리할 수 없습니다. 다른 이미지를 시도해주세요.", "detail": str(e)}
     except Exception as e:
