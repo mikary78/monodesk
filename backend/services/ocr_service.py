@@ -46,16 +46,32 @@ def _get_client() -> anthropic.Anthropic:
 # 상수 정의
 # ─────────────────────────────────────────
 
-# 지원 이미지 확장자 → MIME 타입 매핑
-# Claude Vision API가 인식할 수 있는 형식으로 변환합니다.
-MEDIA_TYPE_MAP = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-    ".bmp": "image/jpeg",  # BMP는 JPEG로 처리 (Claude API 미지원)
-}
+def _detect_media_type(image_path: str) -> str:
+    """
+    파일 매직 바이트로 실제 이미지 MIME 타입을 감지합니다.
+    확장자가 아닌 파일 내용을 기준으로 판단하므로,
+    확장자와 실제 포맷이 다른 경우(예: JPEG 파일에 .png 확장자)에도 정확히 작동합니다.
+
+    지원 포맷:
+        PNG  : 89 50 4E 47 0D 0A 1A 0A
+        JPEG : FF D8 FF
+        WebP : RIFF....WEBP
+        GIF  : GIF87a / GIF89a
+        기타 : image/jpeg (기본값)
+    """
+    with open(image_path, "rb") as f:
+        header = f.read(12)
+
+    if header[:8] == b'\x89PNG\r\n\x1a\n':
+        return "image/png"
+    elif header[:3] == b'\xFF\xD8\xFF':
+        return "image/jpeg"
+    elif header[:4] == b'RIFF' and header[8:12] == b'WEBP':
+        return "image/webp"
+    elif header[:6] in (b'GIF87a', b'GIF89a'):
+        return "image/gif"
+    else:
+        return "image/jpeg"  # 알 수 없는 포맷은 JPEG로 처리
 
 # Claude에게 전달하는 영수증 파싱 프롬프트
 # JSON 외 텍스트를 일절 포함하지 않도록 강하게 지시합니다.
@@ -127,9 +143,9 @@ def extract_receipt_data(image_path: str) -> dict:
         with open(image_path, "rb") as f:
             image_data = base64.standard_b64encode(f.read()).decode("utf-8")
 
-        # 파일 확장자로 MIME 타입 결정 (기본값: image/jpeg)
-        ext = Path(image_path).suffix.lower()
-        media_type = MEDIA_TYPE_MAP.get(ext, "image/jpeg")
+        # 파일 매직 바이트로 실제 MIME 타입 감지 (확장자 오류 방지)
+        media_type = _detect_media_type(image_path)
+        logger.info(f"감지된 미디어 타입: {media_type} ({image_path})")
 
         # Claude Vision API 호출
         # max_tokens=1024: 영수증 JSON 응답에 충분한 토큰 수
