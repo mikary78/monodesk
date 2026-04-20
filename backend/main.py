@@ -42,10 +42,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 설정 (로컬 전용)
+# CORS 설정 — 배포 후 ALLOWED_ORIGINS 환경변수로 실제 URL 지정 권장
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+_allow_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://localhost:5173"],
+    allow_origins=_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

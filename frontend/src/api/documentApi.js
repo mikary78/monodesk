@@ -4,9 +4,9 @@
 // ============================================================
 
 // 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
-import { apiRequest } from "./apiClient";
+import { apiRequest, API_BASE } from "./apiClient";
 
-const BASE = "http://localhost:8000/api/documents";
+const BASE = `${API_BASE}/api/documents`;
 
 /**
  * 인증 헤더가 포함된 내부 요청 헬퍼

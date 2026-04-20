@@ -4,10 +4,9 @@
 // ============================================================
 
 // 공통 인증 API 클라이언트 (JWT 토큰 자동 삽입 + 401 자동 로그아웃)
-import { apiRequest as request } from "./apiClient";
+import { apiRequest as request, API_BASE } from "./apiClient";
 
-// 백엔드 서버 기본 URL (로컬 전용)
-const BASE_URL = "http://localhost:8000/api/dashboard";
+const BASE_URL = `${API_BASE}/api/dashboard`;
 
 // ─────────────────────────────────────────
 // 대시보드 통합 API

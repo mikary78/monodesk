@@ -3,6 +3,7 @@
 # 비밀번호 해시, 토큰 생성/검증, 권한 확인 유틸리티
 # ============================================================
 
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -19,8 +20,8 @@ from models.auth import User
 # 설정 상수
 # ─────────────────────────────────────────
 
-# JWT 서명 키 — 실제 운영 시 환경변수로 교체 권장
-SECRET_KEY = "monodesk-secret-key-change-in-production"
+# JWT 서명 키 — 배포 시 반드시 SECRET_KEY 환경변수로 설정해야 합니다.
+SECRET_KEY = os.getenv("SECRET_KEY", "monodesk-dev-secret-key")
 ALGORITHM = "HS256"
 # 토큰 만료 시간: 8시간 (1 영업일 기준)
 ACCESS_TOKEN_EXPIRE_HOURS = 8

@@ -3,8 +3,9 @@
 // 로그인, 로그아웃, 계정 CRUD API를 제공합니다.
 // ============================================================
 
-// 백엔드 서버 기본 URL (로컬 전용)
-const BASE_URL = "http://localhost:8000/api/auth";
+import { API_BASE } from "./apiClient";
+
+const BASE_URL = `${API_BASE}/api/auth`;
 
 /**
  * 인증 헤더가 포함된 API 요청 공통 처리 함수.

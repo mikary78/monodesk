@@ -100,7 +100,7 @@ const UserModal = ({ isOpen, editUser, onClose, onSave }) => {
         </div>
 
         {/* 모달 본문 */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <form id="user-form" onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
           {/* 아이디 — 신규 생성 시에만 입력 */}
           {!editUser && (
             <div>
@@ -176,11 +176,6 @@ const UserModal = ({ isOpen, editUser, onClose, onSave }) => {
           <button
             type="submit"
             form="user-form"
-            onClick={(e) => {
-              // form 내부 submit 버튼처럼 동작하게 처리
-              const form = e.target.closest(".bg-white")?.querySelector("form");
-              if (form) form.requestSubmit();
-            }}
             className="px-4 py-2 text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors disabled:opacity-50"
             disabled={isLoading}
           >
