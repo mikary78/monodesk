@@ -268,6 +268,28 @@ export async function updateAttendanceStatus(attendanceId, status) {
   });
 }
 
+/**
+ * 주별 전체 직원 근태 달력 데이터 조회.
+ * 엔드포인트: GET /attendance/weekly?date=YYYY-MM-DD
+ * @param {string} date - 기준 날짜 (YYYY-MM-DD) — 해당 날짜가 속한 주(월~일) 반환
+ */
+export async function getWeeklyAttendance(date) {
+  return request(`${BASE_URL}/attendance/weekly?date=${date}`);
+}
+
+/**
+ * 여러 직원 근태 기록 일괄 UPSERT.
+ * 엔드포인트: PATCH /attendance/bulk
+ * @param {Array} records - 업데이트할 근태 목록
+ *   [{ employee_id, date, status, memo }, ...]
+ */
+export async function bulkUpdateAttendance(records) {
+  return request(`${BASE_URL}/attendance/bulk`, {
+    method: "PATCH",
+    body: JSON.stringify(records),
+  });
+}
+
 // ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
@@ -334,6 +356,6 @@ export function formatDate(dateStr) {
  * @returns {string} 변환된 레이블
  */
 export function formatContractType(type) {
-  const map = { "4대보험": "정규직", "3.3%": "계약직", "시급알바": "알바" };
+  const map = { "4대보험": "정규직", "3.3%": "계약직", "시급알바": "알바", "일급": "일급" };
   return map[type] || type;
 }

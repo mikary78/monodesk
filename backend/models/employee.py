@@ -39,6 +39,7 @@ class ContractType(str, Enum):
     INSURANCE = "4대보험"   # 4대보험 (정규직/월급)
     TAX_3_3 = "3.3%"       # 3.3% 원천징수 (계약직)
     HOURLY = "시급알바"     # 시급제 알바
+    DAILY = "일급"          # 일급제 (하루 단위 일급)
 
 
 class Employee(Base):
@@ -101,8 +102,11 @@ class Employee(Base):
     # 근무조건 텍스트 (예: 주5일 17:00~24:00)
     work_condition = Column(String(100), nullable=True, comment="근무조건 (예: 주5일 17:00~24:00)")
 
-    # 계약형태: 4대보험 / 3.3% / 시급알바
-    contract_type = Column(String(10), default="4대보험", comment="계약형태 (4대보험/3.3%/시급알바)")
+    # 계약형태: 4대보험 / 3.3% / 시급알바 / 일급
+    contract_type = Column(String(10), default="4대보험", comment="계약형태 (4대보험/3.3%/시급알바/일급)")
+
+    # 일급 (contract_type이 '일급'일 때 사용, 원/일)
+    daily_wage = Column(Integer, default=0, comment="일급 (원/일, 일급제일 때 사용)")
 
     # 메모
     memo = Column(Text, nullable=True, comment="비고/메모")

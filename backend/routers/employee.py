@@ -8,10 +8,10 @@
 
 import os
 import shutil
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Any
 from database import get_db
 from schemas.employee import (
     EmployeeCreate, EmployeeUpdate, EmployeeResponse,
@@ -242,6 +242,45 @@ def get_monthly_attendance_calendar(
     주의: 고정 경로이므로 /attendance/{attendance_id} 앞에 등록합니다.
     """
     return service.get_monthly_calendar(db, year, month)
+
+
+@router.get("/attendance/weekly")
+def get_weekly_attendance_calendar(
+    date: str = Query(..., description="기준 날짜 (YYYY-MM-DD) — 해당 날짜가 속한 주 반환"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
+):
+    """
+    특정 날짜가 포함된 주(월~일) 전체 직원 근태 데이터 반환.
+    주별 근무표 뷰에서 사용하는 엔드포인트입니다.
+    주의: 고정 경로이므로 /attendance/{attendance_id} 앞에 등록합니다.
+    """
+    try:
+        return service.get_weekly_calendar(db, date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"날짜 형식 오류: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"주별 근태 데이터 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.patch("/attendance/bulk")
+def bulk_update_attendance(
+    records: List[Any] = Body(..., description="근태 일괄 업데이트 목록"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager", "staff")),
+):
+    """
+    여러 직원의 근태 기록을 일괄 UPSERT합니다.
+    기존 레코드가 있으면 UPDATE, 없으면 INSERT합니다.
+    주의: 고정 경로(/attendance/bulk)를 동적 경로(/attendance/{id}) 앞에 등록합니다.
+
+    요청 형식:
+    [{"employee_id": 1, "date": "2026-04-14", "status": "work", "memo": null}, ...]
+    """
+    try:
+        return service.bulk_update_attendance(db, records)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"근태 일괄 저장 중 오류가 발생했습니다: {str(e)}")
 
 
 @router.patch("/attendance/{attendance_id}/status")

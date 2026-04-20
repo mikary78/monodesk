@@ -36,11 +36,12 @@ const WORK_PART_OPTIONS = [
   { value: "management", label: "관리" },
 ];
 
-// 계약형태 옵션
+// 계약형태 옵션 — '일급' 추가
 const CONTRACT_TYPE_OPTIONS = [
   { value: "4대보험", label: "4대보험" },
   { value: "3.3%", label: "3.3% 계약직" },
   { value: "시급알바", label: "시급알바" },
+  { value: "일급", label: "일급" },
 ];
 
 /**
@@ -71,6 +72,8 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
     salary_type: "HOURLY",
     hourly_wage: "",
     monthly_salary: "",
+    // 일급 (계약형태가 '일급'일 때 사용)
+    daily_wage: "",
     has_insurance: false,
     hire_date: "",
     resign_date: "",
@@ -101,6 +104,8 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
         salary_type: employee.salary_type || "HOURLY",
         hourly_wage: employee.hourly_wage ?? "",
         monthly_salary: employee.monthly_salary ?? "",
+        // 일급 — 기존 데이터 없는 경우 빈 문자열로 fallback
+        daily_wage: employee.daily_wage ?? "",
         has_insurance: employee.has_insurance ?? false,
         hire_date: employee.hire_date || "",
         resign_date: employee.resign_date || "",
@@ -145,7 +150,12 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
       newErrors.name = "이름을 입력해주세요.";
     }
 
-    if (form.salary_type === "HOURLY") {
+    if (form.contract_type === "일급") {
+      // 일급 계약형태: daily_wage 필수
+      if (!form.daily_wage || Number(form.daily_wage) <= 0) {
+        newErrors.daily_wage = "일급을 입력해주세요.";
+      }
+    } else if (form.salary_type === "HOURLY") {
       if (!form.hourly_wage || Number(form.hourly_wage) <= 0) {
         newErrors.hourly_wage = "시급을 입력해주세요.";
       } else if (Number(form.hourly_wage) < 10030) {
@@ -172,6 +182,8 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
       ...form,
       hourly_wage: form.salary_type === "HOURLY" && form.hourly_wage !== "" ? Number(form.hourly_wage) : null,
       monthly_salary: form.salary_type === "MONTHLY" && form.monthly_salary !== "" ? Number(form.monthly_salary) : null,
+      // 일급: 계약형태가 '일급'일 때만 값 전송
+      daily_wage: form.contract_type === "일급" && form.daily_wage !== "" ? Number(form.daily_wage) : 0,
       phone: form.phone || null,
       hire_date: form.hire_date || null,
       resign_date: form.resign_date || null,
@@ -382,6 +394,36 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
           {form.contract_type === "3.3%" && (
             <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-700">
               3.3% 원천징수 (소득세 3% + 지방소득세 0.3%)가 자동 적용됩니다.
+            </div>
+          )}
+
+          {/* 일급 선택 시 일급(원/일) 입력 필드 */}
+          {form.contract_type === "일급" && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                일급 <span className="text-red-500">*</span>
+                <span className="text-slate-400 font-normal ml-1">(원/일)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  name="daily_wage"
+                  value={form.daily_wage}
+                  onChange={handleChange}
+                  placeholder="예: 120000"
+                  min={0}
+                  className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.daily_wage ? "border-red-400" : "border-slate-200"
+                  }`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+              </div>
+              {errors.daily_wage && (
+                <p className="text-xs text-red-500 mt-1">{errors.daily_wage}</p>
+              )}
+              <p className="text-xs text-slate-400 mt-1">
+                월 급여 = 일급 × 해당 월 근무일수(출근 기록 기준)
+              </p>
             </div>
           )}
 

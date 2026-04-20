@@ -36,8 +36,10 @@ class EmployeeBase(BaseModel):
     car_allowance: int = 0
     # 근무조건 텍스트 (예: 주5일 17:00~24:00)
     work_condition: Optional[str] = None
-    # 계약형태: 4대보험 / 3.3% / 시급알바
+    # 계약형태: 4대보험 / 3.3% / 시급알바 / 일급
     contract_type: Optional[str] = "4대보험"
+    # 일급 (원/일, 일급제일 때 사용)
+    daily_wage: int = 0
     memo: Optional[str] = None
 
     @field_validator("employment_type")
@@ -95,8 +97,10 @@ class EmployeeUpdate(BaseModel):
     car_allowance: Optional[int] = None
     # 근무조건 텍스트
     work_condition: Optional[str] = None
-    # 계약형태: 4대보험 / 3.3% / 시급알바
+    # 계약형태: 4대보험 / 3.3% / 시급알바 / 일급
     contract_type: Optional[str] = None
+    # 일급 (원/일)
+    daily_wage: Optional[int] = None
     memo: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

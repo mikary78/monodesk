@@ -342,6 +342,176 @@ def get_monthly_calendar(db: Session, year: int, month: int) -> dict:
     }
 
 
+def get_weekly_calendar(db: Session, date_str: str) -> dict:
+    """
+    특정 날짜가 포함된 주(월~일)의 전체 직원 근태 데이터 반환.
+    date 파라미터 기준 해당 주 월요일~일요일 7일 데이터를 반환합니다.
+
+    반환 형태:
+    {
+      "week_start": "YYYY-MM-DD",
+      "week_end": "YYYY-MM-DD",
+      "employees": [{id, name, role, contract_type}],
+      "attendance": {
+        "직원id": {
+          "YYYY-MM-DD": {"status": "work"|null, "memo": null}
+        }
+      },
+      "year": 2026,
+      "month": 4,
+      "week_number": 3
+    }
+    """
+    import calendar as cal_module
+
+    # 기준 날짜 파싱 → 해당 주 월요일 계산
+    target = date.fromisoformat(date_str)
+    week_start = target - timedelta(days=target.weekday())   # 월요일
+    week_end = week_start + timedelta(days=6)                # 일요일
+
+    # 주차 번호 계산 (해당 월 기준 몇 번째 주인지)
+    # ISO 기준이 아닌 "월의 첫 번째 주가 1주차" 방식 사용
+    year = week_start.year
+    month = week_start.month
+    # week_start가 속한 달을 기준으로 주차 계산
+    first_day_of_month = date(year, month, 1)
+    first_monday = first_day_of_month - timedelta(days=first_day_of_month.weekday())
+    week_number = ((week_start - first_monday).days // 7) + 1
+
+    # 주 날짜 목록 (월~일, 7개)
+    week_dates = [(week_start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+
+    # 활성 직원 목록 조회 (계약형태 기준 정렬)
+    employees = db.query(Employee).filter(
+        Employee.is_deleted == 0
+    ).order_by(Employee.contract_type, Employee.id).all()
+
+    # 해당 주 출퇴근 기록 조회
+    records = db.query(AttendanceRecord).filter(
+        AttendanceRecord.work_date >= week_dates[0],
+        AttendanceRecord.work_date <= week_dates[6],
+        AttendanceRecord.is_deleted == 0
+    ).all()
+
+    # 직원별 날짜별 맵 초기화 (기록 없는 날은 null 상태)
+    attendance_map: Dict[int, Dict[str, Any]] = {}
+    for emp in employees:
+        attendance_map[emp.id] = {
+            d: {"status": None, "memo": None} for d in week_dates
+        }
+
+    # 출퇴근 기록을 맵에 채워 넣기
+    for rec in records:
+        if rec.employee_id in attendance_map and rec.work_date in attendance_map[rec.employee_id]:
+            attendance_map[rec.employee_id][rec.work_date] = {
+                "status": rec.daily_status or "work",
+                "memo": rec.memo,
+            }
+
+    return {
+        "week_start": week_dates[0],
+        "week_end": week_dates[6],
+        "employees": [
+            {
+                "id": e.id,
+                "name": e.name,
+                "role": e.work_part or "hall",
+                "contract_type": e.contract_type or "4대보험",
+            }
+            for e in employees
+        ],
+        # JSON 직렬화를 위해 키를 문자열로 변환
+        "attendance": {str(k): v for k, v in attendance_map.items()},
+        "year": year,
+        "month": month,
+        "week_number": week_number,
+    }
+
+
+def bulk_update_attendance(
+    db: Session,
+    records: list
+) -> dict:
+    """
+    여러 직원의 근태 기록을 일괄 업데이트(UPSERT)합니다.
+    기존 레코드가 있으면 status/memo를 UPDATE, 없으면 INSERT합니다.
+
+    records 형식:
+    [{"employee_id": 1, "date": "2026-04-14", "status": "work", "memo": null}, ...]
+
+    반환: {"updated": N, "created": N}
+    """
+    from datetime import datetime as dt
+
+    updated_count = 0
+    created_count = 0
+
+    for item in records:
+        employee_id = item.get("employee_id")
+        work_date = item.get("date")
+        status = item.get("status")
+        memo = item.get("memo")
+
+        # 기존 기록 조회 (소프트 삭제 제외)
+        existing = db.query(AttendanceRecord).filter(
+            AttendanceRecord.employee_id == employee_id,
+            AttendanceRecord.work_date == work_date,
+            AttendanceRecord.is_deleted == 0
+        ).first()
+
+        if existing:
+            # 기존 기록 업데이트
+            existing.daily_status = status
+            existing.memo = memo
+            existing.updated_at = dt.utcnow()
+            updated_count += 1
+        else:
+            # 새 기록 생성 (status가 null이면 건너뜀 — 빈 상태 저장 불필요)
+            if status is not None:
+                new_record = AttendanceRecord(
+                    employee_id=employee_id,
+                    work_date=work_date,
+                    daily_status=status,
+                    memo=memo,
+                )
+                db.add(new_record)
+                created_count += 1
+
+    db.commit()
+    return {"updated": updated_count, "created": created_count}
+
+
+def calculate_daily_wage_monthly(
+    db: Session,
+    employee_id: int,
+    year: int,
+    month: int
+) -> int:
+    """
+    일급 직원의 월 급여를 계산합니다.
+    일급 × 해당 월 AttendanceRecord에서 status='work'인 일수.
+    """
+    employee = get_employee_by_id(db, employee_id)
+    if not employee:
+        return 0
+
+    daily_wage = getattr(employee, "daily_wage", 0) or 0
+
+    # 해당 월 'work' 상태 근무일수 카운트
+    start_date = f"{year}-{month:02d}-01"
+    end_date = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+
+    work_day_count = db.query(AttendanceRecord).filter(
+        AttendanceRecord.employee_id == employee_id,
+        AttendanceRecord.is_deleted == 0,
+        AttendanceRecord.work_date >= start_date,
+        AttendanceRecord.work_date < end_date,
+        AttendanceRecord.daily_status == "work"
+    ).count()
+
+    return daily_wage * work_day_count
+
+
 def update_attendance_status(
     db: Session,
     attendance_id: int,
