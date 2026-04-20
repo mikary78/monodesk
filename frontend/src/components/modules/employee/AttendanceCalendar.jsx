@@ -32,14 +32,24 @@ function getStatusStyle(value) {
   return STATUS_LIST.find((s) => s.value === value) || null;
 }
 
-/** 오늘 날짜 문자열 (YYYY-MM-DD) */
+/** 오늘 날짜 문자열 (YYYY-MM-DD) — 로컬 타임존 기준 */
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-/** Date 객체를 YYYY-MM-DD 문자열로 변환합니다. */
+/**
+ * Date 객체를 YYYY-MM-DD 문자열로 변환합니다. — 로컬 타임존 기준
+ * toISOString()은 UTC 변환으로 UTC+9에서 날짜가 하루 앞당겨지므로 사용 금지.
+ */
 function toDateStr(d) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /** YYYY-MM-DD → Date 객체 변환 (시간대 오프셋 방지) */
