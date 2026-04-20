@@ -383,13 +383,24 @@ const AttendanceCalendar = ({ year, month }) => {
 
   const { employees } = weekData;
 
-  // 계약형태별로 직원 그룹핑
-  const contractGroups = {};
+  // 직무(role)별 한국어 이름 매핑 및 정렬 순서
+  const ROLE_LABEL = {
+    kitchen: "주방",
+    hall: "홀",
+    management: "관리",
+    other: "기타",
+  };
+  const ROLE_ORDER = ["kitchen", "hall", "management", "other"];
+
+  // 직무별로 직원 그룹핑 (정렬 순서 유지)
+  const roleGroups = {};
+  ROLE_ORDER.forEach((r) => { roleGroups[r] = []; });
   employees.forEach((emp) => {
-    const ct = emp.contract_type || "기타";
-    if (!contractGroups[ct]) contractGroups[ct] = [];
-    contractGroups[ct].push(emp);
+    const r = emp.role && roleGroups[emp.role] !== undefined ? emp.role : "other";
+    roleGroups[r].push(emp);
   });
+  // 직원이 없는 그룹 제거
+  const activeRoleGroups = Object.entries(roleGroups).filter(([, list]) => list.length > 0);
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -471,16 +482,16 @@ const AttendanceCalendar = ({ year, month }) => {
           </thead>
 
           <tbody>
-            {/* 계약형태별 섹션 구분 */}
-            {Object.entries(contractGroups).map(([contractType, groupEmployees]) => (
+            {/* 직무별 섹션 구분 */}
+            {activeRoleGroups.map(([role, groupEmployees]) => (
               <>
                 {/* 섹션 구분 행 */}
-                <tr key={`section-${contractType}`} className="bg-slate-50/70">
+                <tr key={`section-${role}`} className="bg-slate-50/70">
                   <td
                     colSpan={weekDates.length + 2}
                     className="px-4 py-1.5 text-[11px] font-semibold text-slate-500 border-y border-slate-100"
                   >
-                    {contractType}
+                    {ROLE_LABEL[role] || role}
                   </td>
                 </tr>
 
