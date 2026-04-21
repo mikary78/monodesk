@@ -37,15 +37,9 @@ services:
     rootDir: frontend
     buildCommand: npm install && node node_modules/vite/bin/vite.js build
     staticPublishPath: dist
-    nodeVersion: 20.11.0
     envVars:
-      # VITE_API_URL: Vite 빌드 타임에 번들에 주입됩니다.
-      # sync: false 대신 value를 직접 지정하여 Render 대시보드 수동 입력 없이 자동 주입합니다.
       - key: VITE_API_URL
         value: https://monodesk-backend.onrender.com
-      # NODE_ENV: Vite가 .env.production 파일을 로드하는 조건입니다.
-      - key: NODE_ENV
-        value: production
     routes:
       - type: rewrite
         source: /*
