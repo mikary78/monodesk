@@ -13,11 +13,11 @@
  * @returns {Promise<any>} 응답 데이터 (JSON)
  * @throws {Error} HTTP 오류 또는 서버 오류 시 한국어 메시지 포함 에러
  */
-// 백엔드 서버 기본 URL — VITE_API_URL 환경변수 우선, 없으면 로컬 개발 주소
-export const API_BASE =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL
-    ? import.meta.env.VITE_API_URL
-    : "http://localhost:8000";
+// 백엔드 서버 기본 URL — Vite 빌드 타임에 VITE_API_URL을 직접 치환
+// 주의: Vite는 `import.meta.env.VITE_API_URL` 패턴을 정적으로 감지해서 빌드 시 실제 값으로 교체합니다.
+// `?.` 옵셔널 체이닝이나 `typeof` 조건문으로 감싸면 Vite가 치환 패턴을 인식하지 못할 수 있어서
+// 아래처럼 단순한 형태로 작성합니다.
+export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export async function apiRequest(url, options = {}) {
   // 로컬스토리지에서 JWT 토큰 가져오기
