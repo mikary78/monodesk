@@ -3,6 +3,13 @@
 # https://render.com/docs/blueprint-spec
 # ============================================================
 
+databases:
+  # ── PostgreSQL 데이터베이스 ───────────────────────────────
+  - name: monodesk-db
+    databaseName: monodesk
+    user: monodesk_user
+    plan: free            # 무료 플랜 (90일 후 만료, 유지하려면 유료 전환 필요)
+
 services:
   # ── 백엔드 (FastAPI) ──────────────────────────────────────
   - type: web
@@ -12,12 +19,14 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: monodesk-db
+          property: connectionString   # Render가 자동으로 PostgreSQL URL 주입
       - key: ANTHROPIC_API_KEY
         sync: false          # Render 대시보드에서 직접 입력
       - key: SECRET_KEY
-        sync: false          # Render 대시보드에서 직접 입력
-      - key: DATABASE_URL
-        value: sqlite:///./monodesk.db
+        sync: false          # Render 대시보드에서 직접 입력 (강력한 랜덤 키 권장)
       - key: ALLOWED_ORIGINS
         sync: false          # 프론트엔드 URL (예: https://monodesk-frontend.onrender.com)
 

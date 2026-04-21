@@ -7,6 +7,8 @@ uvicorn[standard]>=0.30.0
 
 # --- 데이터베이스 ---
 sqlalchemy>=2.0.27
+psycopg2-binary>=2.9.9   # PostgreSQL 드라이버 (Render 배포용)
+alembic>=1.13.0          # DB 스키마 마이그레이션 도구
 
 # --- 데이터 검증 ---
 pydantic>=2.9.0
