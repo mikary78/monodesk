@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE } from "../api/apiClient";
 
 // ─────────────────────────────────────────
 // 역할별 접근 가능한 기능 목록 (백엔드 auth.py와 동기화)
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
           setToken(savedToken);
 
           // 토큰 유효성 확인 (백엔드 /me 호출)
-          const response = await fetch("http://localhost:8000/api/auth/me", {
+          const response = await fetch(`${API_BASE}/api/auth/me`, {
             headers: { Authorization: `Bearer ${savedToken}` },
           });
 
@@ -113,7 +114,7 @@ export const AuthProvider = ({ children }) => {
    * @throws {Error} 로그인 실패 시 한국어 메시지를 포함한 에러
    */
   const login = useCallback(async (username, password) => {
-    const response = await fetch("http://localhost:8000/api/auth/login", {
+    const response = await fetch(`${API_BASE}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -150,7 +151,7 @@ export const AuthProvider = ({ children }) => {
       // 서버에 로그아웃 알림 (선택적 — 서버는 Stateless)
       const savedToken = localStorage.getItem("access_token");
       if (savedToken) {
-        await fetch("http://localhost:8000/api/auth/logout", {
+        await fetch(`${API_BASE}/api/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${savedToken}` },
         }).catch(() => {}); // 실패해도 클라이언트 로그아웃은 진행
