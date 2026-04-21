@@ -14,7 +14,7 @@
  * @throws {Error} HTTP 오류 또는 서버 오류 시 한국어 메시지 포함 에러
  */
 // 백엔드 서버 기본 URL — 배포 시 VITE_API_URL 환경변수로 교체됩니다.
-export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export async function apiRequest(url, options = {}) {
   // 로컬스토리지에서 JWT 토큰 가져오기

@@ -21,6 +21,8 @@ backend/uploads/
 .env.production
 backend/.env
 *.env
+# frontend/.env.production은 VITE_API_URL 빌드 시 주입용으로 커밋 허용
+!frontend/.env.production
 
 # ── Python 캐시 및 가상환경 ──
 __pycache__/
