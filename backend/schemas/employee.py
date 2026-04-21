@@ -17,8 +17,8 @@ class EmployeeBase(BaseModel):
     """직원 기본 정보 공통 필드"""
     name: str
     phone: Optional[str] = None
-    employment_type: str = "PART_TIME"   # FULL_TIME / PART_TIME
-    salary_type: str = "HOURLY"          # HOURLY / MONTHLY
+    employment_type: str = "PART_TIME"   # FULL_TIME / PART_TIME / CONTRACT
+    salary_type: str = "HOURLY"          # HOURLY / MONTHLY / DAILY
     hourly_wage: Optional[float] = None
     monthly_salary: Optional[float] = None
     has_insurance: bool = False
@@ -46,18 +46,18 @@ class EmployeeBase(BaseModel):
     @classmethod
     def validate_employment_type(cls, v: str) -> str:
         """고용 형태 유효성 검사"""
-        allowed = {"FULL_TIME", "PART_TIME"}
+        allowed = {"FULL_TIME", "PART_TIME", "CONTRACT"}
         if v not in allowed:
-            raise ValueError("고용 형태는 FULL_TIME 또는 PART_TIME이어야 합니다.")
+            raise ValueError("고용 형태는 FULL_TIME, PART_TIME, CONTRACT 중 하나여야 합니다.")
         return v
 
     @field_validator("salary_type")
     @classmethod
     def validate_salary_type(cls, v: str) -> str:
         """급여 유형 유효성 검사"""
-        allowed = {"HOURLY", "MONTHLY"}
+        allowed = {"HOURLY", "MONTHLY", "DAILY"}
         if v not in allowed:
-            raise ValueError("급여 유형은 HOURLY 또는 MONTHLY이어야 합니다.")
+            raise ValueError("급여 유형은 HOURLY, MONTHLY, DAILY 중 하나여야 합니다.")
         return v
 
     @field_validator("hourly_wage", "monthly_salary")
