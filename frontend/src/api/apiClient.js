@@ -15,12 +15,14 @@
  */
 // 백엔드 서버 URL — 런타임 호스트명으로 판별 (빌드 환경변수 주입 불필요)
 // localhost 또는 127.0.0.1이면 로컬 개발 서버, 아니면 Render 배포 백엔드
-const _isLocal =
-  window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1";
+const _host = window.location.hostname;
+const _isLocal = _host === "localhost" || _host === "127.0.0.1";
 export const API_BASE = _isLocal
   ? "http://localhost:8000"
   : "https://monodesk-backend.onrender.com";
+
+// 배포 환경 진단용 — 브라우저 콘솔에서 확인 가능
+console.log("[MonoDesk] hostname:", _host, "→ API_BASE:", API_BASE);
 
 export async function apiRequest(url, options = {}) {
   // 로컬스토리지에서 JWT 토큰 가져오기
