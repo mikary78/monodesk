@@ -12,12 +12,14 @@ import { useToast } from "../../../contexts/ToastContext";
 const EMPLOYMENT_TYPE_OPTIONS = [
   { value: "PART_TIME", label: "아르바이트" },
   { value: "FULL_TIME", label: "정규직" },
+  { value: "CONTRACT", label: "계약직" },
 ];
 
 // 급여 유형 옵션
 const SALARY_TYPE_OPTIONS = [
   { value: "HOURLY", label: "시급제" },
   { value: "MONTHLY", label: "월급제" },
+  { value: "DAILY", label: "일급제" },
 ];
 
 // 포지션 옵션 (여남동 맞춤)
@@ -150,8 +152,8 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
       newErrors.name = "이름을 입력해주세요.";
     }
 
-    if (form.contract_type === "일급") {
-      // 일급 계약형태: daily_wage 필수
+    if (form.contract_type === "일급" || form.salary_type === "DAILY") {
+      // 일급 계약형태 또는 일급제: daily_wage 필수
       if (!form.daily_wage || Number(form.daily_wage) <= 0) {
         newErrors.daily_wage = "일급을 입력해주세요.";
       }
@@ -477,6 +479,28 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
                   </div>
                   {errors.hourly_wage && <p className="text-xs text-red-500 mt-1">{errors.hourly_wage}</p>}
+                </>
+              ) : form.salary_type === "DAILY" ? (
+                <>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    일급 <span className="text-red-500">*</span>
+                    <span className="text-slate-400 font-normal ml-1">(원/일)</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      name="daily_wage"
+                      value={form.daily_wage}
+                      onChange={handleChange}
+                      placeholder="120000"
+                      min={0}
+                      className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        errors.daily_wage ? "border-red-400" : "border-slate-200"
+                      }`}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                  </div>
+                  {errors.daily_wage && <p className="text-xs text-red-500 mt-1">{errors.daily_wage}</p>}
                 </>
               ) : (
                 <>
