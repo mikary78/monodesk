@@ -2,6 +2,10 @@
 // Sidebar.jsx — 좌측 네비게이션 사이드바 컴포넌트
 // 디자인 시스템의 사이드바 스펙(#1E293B, 240px)을 따릅니다.
 // 역할(role)에 따라 메뉴 표시/숨김을 제어합니다.
+//
+// 모바일 대응:
+//   - isOpen: 사이드바 슬라이드 표시 여부 (Layout에서 제어)
+//   - onClose: 메뉴 항목 클릭 시 사이드바 닫기 콜백
 // ============================================================
 
 import { NavLink } from "react-router-dom";
@@ -79,8 +83,11 @@ const NAV_ITEMS = [
  * 좌측 고정 사이드바 컴포넌트.
  * 활성 메뉴는 파란 배경으로 강조 표시됩니다.
  * 역할에 따라 접근 가능한 메뉴만 표시됩니다.
+ *
+ * @param {boolean} isOpen   - 모바일에서 사이드바 표시 여부 (Layout에서 제어)
+ * @param {Function} onClose - 모바일에서 사이드바 닫기 콜백
  */
-const Sidebar = () => {
+const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const { user, hasPermission, logout } = useAuth();
 
   /**
@@ -91,6 +98,14 @@ const Sidebar = () => {
     logout();
   };
 
+  /**
+   * 메뉴 항목 클릭 핸들러.
+   * 모바일에서 항목 선택 시 사이드바를 자동으로 닫습니다.
+   */
+  const handleNavClick = () => {
+    onClose();
+  };
+
   // 역할 레이블 매핑
   const roleLabel = {
     admin: "관리자",
@@ -99,31 +114,75 @@ const Sidebar = () => {
   }[user?.role] || user?.role;
 
   return (
-    <aside className="w-60 min-h-screen bg-slate-800 flex flex-col fixed left-0 top-0 z-20">
-      {/* 로고 + 앱명 영역 (64px) */}
-      <div className="h-16 flex flex-col justify-center px-5 border-b border-slate-700">
-        <span className="text-white font-bold text-lg leading-tight">MonoDesk</span>
-        <span className="text-slate-400 text-xs">여남동</span>
-      </div>
-
-      {/* 로그인 사용자 정보 */}
-      {user && (
-        <div className="px-5 py-3 border-b border-slate-700">
-          <p className="text-white text-sm font-medium truncate">{user.name}</p>
-          <p className="text-slate-400 text-xs">{roleLabel}</p>
-        </div>
+    <>
+      {/* ── 모바일 오버레이 (사이드바 뒤 어두운 배경) ──────────
+          사이드바가 열렸을 때만 표시, 클릭 시 닫힘
+          md 이상에서는 숨김
+      ──────────────────────────────────────────────────────── */}
+      {isOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={onClose}
+          aria-hidden="true"
+        />
       )}
 
-      {/* 메뉴 목록 — 역할 기반 필터링 */}
-      <nav className="flex-1 py-4 overflow-y-auto">
-        {NAV_ITEMS.map(({ path, label, Icon, requiredPermission }) => {
-          // 해당 메뉴에 대한 권한이 없으면 표시하지 않음
-          if (!hasPermission(requiredPermission)) return null;
+      {/* ── 사이드바 본체 ────────────────────────────────────────
+          모바일: fixed + z-50, translate로 슬라이드 인/아웃
+          데스크탑(md+): 항상 표시, translate 초기화
+      ──────────────────────────────────────────────────────── */}
+      <aside
+        className={`
+          fixed left-0 top-0 z-50 w-60 min-h-screen bg-slate-800 flex flex-col
+          transition-transform duration-300 ease-in-out
+          ${isOpen ? "translate-x-0" : "-translate-x-full"}
+          md:translate-x-0 md:z-20
+        `}
+      >
+        {/* 로고 + 앱명 영역 (64px) */}
+        <div className="h-16 flex flex-col justify-center px-5 border-b border-slate-700">
+          <span className="text-white font-bold text-lg leading-tight">MonoDesk</span>
+          <span className="text-slate-400 text-xs">여남동</span>
+        </div>
 
-          return (
+        {/* 로그인 사용자 정보 */}
+        {user && (
+          <div className="px-5 py-3 border-b border-slate-700">
+            <p className="text-white text-sm font-medium truncate">{user.name}</p>
+            <p className="text-slate-400 text-xs">{roleLabel}</p>
+          </div>
+        )}
+
+        {/* 메뉴 목록 — 역할 기반 필터링 */}
+        <nav className="flex-1 py-4 overflow-y-auto">
+          {NAV_ITEMS.map(({ path, label, Icon, requiredPermission }) => {
+            // 해당 메뉴에 대한 권한이 없으면 표시하지 않음
+            if (!hasPermission(requiredPermission)) return null;
+
+            return (
+              <NavLink
+                key={path}
+                to={path}
+                onClick={handleNavClick}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
+                    isActive
+                      ? "bg-blue-500 text-white font-semibold"
+                      : "text-slate-400 hover:text-white hover:bg-slate-700"
+                  }`
+                }
+              >
+                <Icon size={20} />
+                {label}
+              </NavLink>
+            );
+          })}
+
+          {/* 계정 관리 — admin 전용 */}
+          {hasPermission("user_management") && (
             <NavLink
-              key={path}
-              to={path}
+              to="/settings"
+              onClick={handleNavClick}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
                   isActive
@@ -132,57 +191,41 @@ const Sidebar = () => {
                 }`
               }
             >
-              <Icon size={20} />
-              {label}
+              <UserCog size={20} />
+              계정 관리
             </NavLink>
-          );
-        })}
+          )}
+        </nav>
 
-        {/* 계정 관리 — admin 전용 */}
-        {hasPermission("user_management") && (
+        {/* 하단 고정: 설정 + 로그아웃 */}
+        <div className="border-t border-slate-700">
+          {/* 설정 메뉴 */}
           <NavLink
             to="/settings"
+            onClick={handleNavClick}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-5 py-2.5 text-sm transition-colors ${
+              `flex items-center gap-3 px-5 py-3 text-sm transition-colors ${
                 isActive
                   ? "bg-blue-500 text-white font-semibold"
                   : "text-slate-400 hover:text-white hover:bg-slate-700"
               }`
             }
           >
-            <UserCog size={20} />
-            계정 관리
+            <Settings size={20} />
+            설정
           </NavLink>
-        )}
-      </nav>
 
-      {/* 하단 고정: 설정 + 로그아웃 */}
-      <div className="border-t border-slate-700">
-        {/* 설정 메뉴 */}
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-5 py-3 text-sm transition-colors ${
-              isActive
-                ? "bg-blue-500 text-white font-semibold"
-                : "text-slate-400 hover:text-white hover:bg-slate-700"
-            }`
-          }
-        >
-          <Settings size={20} />
-          설정
-        </NavLink>
-
-        {/* 로그아웃 버튼 */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-5 py-3 text-sm text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-        >
-          <LogOut size={20} />
-          로그아웃
-        </button>
-      </div>
-    </aside>
+          {/* 로그아웃 버튼 */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-5 py-3 text-sm text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+          >
+            <LogOut size={20} />
+            로그아웃
+          </button>
+        </div>
+      </aside>
+    </>
   );
 };
 

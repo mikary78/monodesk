@@ -1,10 +1,13 @@
 // ============================================================
 // EmployeePage.jsx — 직원 관리 메인 페이지
 // 4개 탭: 직원 목록 / 출퇴근 관리 / 급여 정산 / 근무표 달력
+// staff 역할: 근무표 달력 탭만 표시 (초기 탭도 calendar)
+// admin/manager: 4개 탭 모두 표시 (초기 탭 employees)
 // ============================================================
 
 import { useState } from "react";
 import { Users, ChevronLeft, ChevronRight, UserCheck, Clock, DollarSign, Calendar } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 import EmployeeList from "../components/modules/employee/EmployeeList";
 import AttendanceList from "../components/modules/employee/AttendanceList";
 import SalaryPanel from "../components/modules/employee/SalaryPanel";
@@ -20,13 +23,22 @@ const TABS = [
 
 const EmployeePage = () => {
   const today = new Date();
+  const { user } = useAuth();
+
+  // staff 역할 여부 — 근무표 달력 탭만 접근 가능
+  const isStaff = user?.role === "staff";
 
   // 현재 선택된 연도/월 상태
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
-  // 현재 활성 탭
-  const [activeTab, setActiveTab] = useState("employees");
+  // 현재 활성 탭 — staff면 calendar, 그 외는 employees
+  const [activeTab, setActiveTab] = useState(isStaff ? "calendar" : "employees");
+
+  // 표시할 탭 목록 — staff는 근무표 달력만, 그 외는 전체
+  const visibleTabs = isStaff
+    ? TABS.filter((t) => t.id === "calendar")
+    : TABS;
 
   /**
    * 이전 달로 이동
@@ -94,9 +106,9 @@ const EmployeePage = () => {
         )}
       </div>
 
-      {/* 탭 네비게이션 */}
+      {/* 탭 네비게이션 — staff는 근무표 달력 탭만 렌더링 */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {TABS.map(({ id, label, Icon }) => (
+        {visibleTabs.map(({ id, label, Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
