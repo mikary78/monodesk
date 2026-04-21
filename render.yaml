@@ -35,8 +35,9 @@ services:
     name: monodesk-frontend
     runtime: static
     rootDir: frontend
-    buildCommand: npm install && ./node_modules/.bin/vite build
+    buildCommand: npm install && node node_modules/vite/bin/vite.js build
     staticPublishPath: dist
+    nodeVersion: 20.11.0
     envVars:
       - key: VITE_API_URL
         sync: false          # 백엔드 URL (예: https://monodesk-backend.onrender.com)
