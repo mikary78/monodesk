@@ -35,7 +35,8 @@ const ROLE_PERMISSIONS = {
     "operations",
   ],
   staff: [
-    "employee_attendance",  // 근무표 조회만 허용
+    "dashboard",            // 대시보드 조회 허용
+    "employee_attendance",  // 근무표 조회 허용
   ],
 };
 
