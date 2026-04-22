@@ -27,12 +27,11 @@ const ROLE_PERMISSIONS = {
   ],
   manager: [
     "dashboard",
-    "accounting",           // 지분 정산 탭 제외
+    "accounting",           // 지분 정산 탭 제외 (accounting_dividend 없음)
     "sales",
     "inventory",
     "menu",
-    "employee_attendance",  // 근태/근무표만 허용
-    "operations",
+    "employee_attendance",  // 근무표 입력/수정만 허용 (직원 목록·급여 제외)
   ],
   staff: [
     "dashboard",            // 대시보드 조회 허용
