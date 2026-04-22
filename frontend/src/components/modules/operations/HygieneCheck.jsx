@@ -36,7 +36,8 @@ const CATEGORY_LABELS = {
   equipment: "설비",
 };
 
-const HygieneCheck = () => {
+// readOnly: true이면 점검결과 저장·항목관리·초기화 버튼 숨김 (staff 읽기 전용 모드)
+const HygieneCheck = ({ readOnly = false }) => {
   // 오늘 날짜 기준으로 초기화
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -178,25 +179,28 @@ const HygieneCheck = () => {
           </button>
         </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={handleSeed}
-            className="h-9 px-3 border border-slate-200 bg-white text-slate-600 text-sm rounded-md hover:bg-slate-50 transition-colors"
-          >
-            기본 항목 초기화
-          </button>
-          <button
-            onClick={() => setManageMode((m) => !m)}
-            className={`flex items-center gap-1.5 h-9 px-3 text-sm rounded-md transition-colors ${
-              manageMode
-                ? "bg-blue-500 text-white"
-                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            <Settings size={14} />
-            항목 관리
-          </button>
-        </div>
+        {/* 관리 버튼 — readOnly 모드에서 숨김 */}
+        {!readOnly && (
+          <div className="flex gap-2">
+            <button
+              onClick={handleSeed}
+              className="h-9 px-3 border border-slate-200 bg-white text-slate-600 text-sm rounded-md hover:bg-slate-50 transition-colors"
+            >
+              기본 항목 초기화
+            </button>
+            <button
+              onClick={() => setManageMode((m) => !m)}
+              className={`flex items-center gap-1.5 h-9 px-3 text-sm rounded-md transition-colors ${
+                manageMode
+                  ? "bg-blue-500 text-white"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <Settings size={14} />
+              항목 관리
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 에러 */}
@@ -335,17 +339,18 @@ const HygieneCheck = () => {
                     </p>
                   </div>
 
-                  {/* 결과 선택 버튼 */}
+                  {/* 결과 선택 버튼 — readOnly 모드에서 비활성화 */}
                   <div className="flex gap-2">
                     {RESULT_OPTIONS.map(({ value, label, Icon, color }) => (
                       <button
                         key={value}
-                        onClick={() => handleResultChange(record.checklist_id, value)}
+                        onClick={() => !readOnly && handleResultChange(record.checklist_id, value)}
+                        disabled={readOnly}
                         className={`flex items-center gap-1.5 h-8 px-3 rounded border text-xs font-medium transition-colors ${
                           record.result === value
                             ? color
                             : "border-slate-200 text-slate-400 hover:bg-slate-50"
-                        }`}
+                        } ${readOnly ? "cursor-not-allowed opacity-60" : ""}`}
                       >
                         <Icon size={14} />
                         {label}

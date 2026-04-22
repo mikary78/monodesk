@@ -17,7 +17,8 @@ const NOTICE_TYPES = [
 // 빈 폼 초기값
 const EMPTY_FORM = { title: "", content: "", notice_type: "notice", is_pinned: 0, author: "" };
 
-const NoticeBoard = () => {
+// readOnly: true이면 추가/수정/삭제 버튼을 숨김 (staff 읽기 전용 모드)
+const NoticeBoard = ({ readOnly = false }) => {
   // 공지사항 목록 상태
   const [notices, setNotices] = useState([]);
   // 필터 상태
@@ -145,14 +146,16 @@ const NoticeBoard = () => {
           ))}
         </div>
 
-        {/* 신규 추가 버튼 */}
-        <button
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 h-9 px-4 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 transition-colors"
-        >
-          <Plus size={16} />
-          공지 추가
-        </button>
+        {/* 신규 추가 버튼 — readOnly 모드에서 숨김 */}
+        {!readOnly && (
+          <button
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 h-9 px-4 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 transition-colors"
+          >
+            <Plus size={16} />
+            공지 추가
+          </button>
+        )}
       </div>
 
       {/* 에러 메시지 */}
@@ -211,23 +214,25 @@ const NoticeBoard = () => {
                     </div>
                   </div>
 
-                  {/* 액션 버튼 */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => handleOpenEdit(notice)}
-                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                      title="수정"
-                    >
-                      <Edit size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(notice.id)}
-                      className="h-7 w-7 flex items-center justify-center rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
-                      title="삭제"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {/* 액션 버튼 — readOnly 모드에서 숨김 */}
+                  {!readOnly && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleOpenEdit(notice)}
+                        className="h-7 w-7 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                        title="수정"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(notice.id)}
+                        className="h-7 w-7 flex items-center justify-center rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                        title="삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

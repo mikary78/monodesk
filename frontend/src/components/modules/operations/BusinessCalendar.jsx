@@ -26,7 +26,8 @@ const WEATHER_OPTIONS = ["맑음", "흐림", "비", "눈", "강풍", "안개"];
 // 요일 헤더
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-const BusinessCalendar = ({ year: propYear, month: propMonth }) => {
+// readOnly: true이면 날짜 클릭 시 편집 패널을 열지 않음 (staff 읽기 전용 모드)
+const BusinessCalendar = ({ year: propYear, month: propMonth, readOnly = false }) => {
   const today = new Date();
   // 부모에서 year/month를 받으면 해당 값 사용, 없으면 오늘 기준
   const [year, setYear]   = useState(propYear  ?? today.getFullYear());
@@ -96,6 +97,8 @@ const BusinessCalendar = ({ year: propYear, month: propMonth }) => {
   // ─── 날짜 클릭 → 편집 폼 열기 ────────────────────────
 
   const handleDayClick = (day) => {
+    // readOnly 모드에서는 편집 패널을 열지 않음
+    if (readOnly) return;
     const dateStr = toDateStr(day);
     setSelectedDate(dateStr);
     const existing = dayMap[dateStr];
@@ -215,7 +218,7 @@ const BusinessCalendar = ({ year: propYear, month: propMonth }) => {
                   <div
                     key={dateStr}
                     onClick={() => handleDayClick(day)}
-                    className={`h-20 border-b border-r border-slate-50 p-1.5 cursor-pointer transition-colors ${
+                    className={`h-20 border-b border-r border-slate-50 p-1.5 transition-colors ${readOnly ? "cursor-default" : "cursor-pointer"} ${
                       isSel   ? "bg-blue-50 ring-2 ring-inset ring-blue-400" :
                       isToday ? "bg-amber-50" :
                       "hover:bg-slate-50"

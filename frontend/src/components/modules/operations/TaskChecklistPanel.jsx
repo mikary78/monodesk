@@ -29,7 +29,8 @@ const ROLE_COLORS = {
   "홀":   "bg-blue-50 text-blue-600",
 };
 
-const TaskChecklistPanel = () => {
+// readOnly: true이면 완료 토글·항목 관리·초기화 버튼 숨김 (staff 읽기 전용 모드)
+const TaskChecklistPanel = ({ readOnly = false }) => {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [activeType, setActiveType]     = useState("open");
@@ -217,25 +218,28 @@ const TaskChecklistPanel = () => {
           </button>
         </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={handleSeed}
-            className="h-9 px-3 border border-slate-200 bg-white text-slate-600 text-sm rounded-md hover:bg-slate-50 transition-colors"
-          >
-            기본 항목 초기화
-          </button>
-          <button
-            onClick={() => setManageMode((m) => !m)}
-            className={`flex items-center gap-1.5 h-9 px-3 text-sm rounded-md transition-colors ${
-              manageMode
-                ? "bg-blue-500 text-white"
-                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            <Settings size={14} />
-            항목 관리
-          </button>
-        </div>
+        {/* 관리 버튼 — readOnly 모드에서 숨김 */}
+        {!readOnly && (
+          <div className="flex gap-2">
+            <button
+              onClick={handleSeed}
+              className="h-9 px-3 border border-slate-200 bg-white text-slate-600 text-sm rounded-md hover:bg-slate-50 transition-colors"
+            >
+              기본 항목 초기화
+            </button>
+            <button
+              onClick={() => setManageMode((m) => !m)}
+              className={`flex items-center gap-1.5 h-9 px-3 text-sm rounded-md transition-colors ${
+                manageMode
+                  ? "bg-blue-500 text-white"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <Settings size={14} />
+              항목 관리
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 에러 */}
@@ -366,21 +370,23 @@ const TaskChecklistPanel = () => {
                   </span>
                 </div>
               </div>
-              {/* 전체 완료 / 초기화 버튼 */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleResetAll}
-                  className="h-7 px-3 border border-slate-200 text-xs text-slate-600 rounded hover:bg-slate-50 transition-colors"
-                >
-                  전체 초기화
-                </button>
-                <button
-                  onClick={handleCompleteAll}
-                  className="h-7 px-3 bg-green-500 text-white text-xs font-semibold rounded hover:bg-green-600 transition-colors"
-                >
-                  전체 완료
-                </button>
-              </div>
+              {/* 전체 완료 / 초기화 버튼 — readOnly 모드에서 숨김 */}
+              {!readOnly && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleResetAll}
+                    className="h-7 px-3 border border-slate-200 text-xs text-slate-600 rounded hover:bg-slate-50 transition-colors"
+                  >
+                    전체 초기화
+                  </button>
+                  <button
+                    onClick={handleCompleteAll}
+                    className="h-7 px-3 bg-green-500 text-white text-xs font-semibold rounded hover:bg-green-600 transition-colors"
+                  >
+                    전체 완료
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -400,8 +406,8 @@ const TaskChecklistPanel = () => {
                 return (
                   <div
                     key={task.task_id}
-                    onClick={() => handleToggle(task.task_id, task.is_done)}
-                    className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all select-none ${
+                    onClick={() => !readOnly && handleToggle(task.task_id, task.is_done)}
+                    className={`flex items-center gap-3 p-4 rounded-lg border transition-all select-none ${readOnly ? "cursor-default" : "cursor-pointer"} ${
                       isDone
                         ? "bg-green-50 border-green-200"
                         : "bg-white border-slate-100 hover:border-slate-200 hover:shadow-sm"

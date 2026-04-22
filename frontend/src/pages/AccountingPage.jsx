@@ -1,23 +1,30 @@
 // ============================================================
 // AccountingPage.jsx - 세무/회계 관리 메인 페이지
-// PRD 1: 5개 탭 - 매출/지출/손익/지분/리포트
+// 8개 탭 - 매출/지출/손익/지분/리포트 + 일일마감/고정비설정/월별고정비
+// ※ 일일마감·고정비 탭은 운영관리(OperationsPage)에서 이동됨
 // ============================================================
 
 import { useState } from "react";
-import { DollarSign, ChevronLeft, ChevronRight, TrendingUp, List, BarChart2, Users, FileText } from "lucide-react";
-import ProfitLossCard from "../components/modules/accounting/ProfitLossCard";
-import SalesList from "../components/modules/accounting/SalesList";
-import ExpenseList from "../components/modules/accounting/ExpenseList";
+import { DollarSign, ChevronLeft, ChevronRight, TrendingUp, List, BarChart2, Users, FileText, Wallet, Settings } from "lucide-react";
+import ProfitLossCard    from "../components/modules/accounting/ProfitLossCard";
+import SalesList         from "../components/modules/accounting/SalesList";
+import ExpenseList       from "../components/modules/accounting/ExpenseList";
 import DividendSimulation from "../components/modules/accounting/DividendSimulation";
-import MonthlyReport from "../components/modules/accounting/MonthlyReport";
+import MonthlyReport     from "../components/modules/accounting/MonthlyReport";
+import DailyClosingForm  from "../components/modules/operations/DailyClosingForm";
+import FixedCostSettings from "../components/modules/operations/FixedCostSettings";
+import FixedCostMonthly  from "../components/modules/operations/FixedCostMonthly";
 
-// PRD 1: 5개 탭 메뉴 정의
+// 8개 탭 메뉴 정의 (기존 5개 + 운영관리에서 이동한 3개)
 const TABS = [
-  { id: "sales",    label: "매출 관리",  Icon: TrendingUp },
-  { id: "expenses", label: "지출 관리",  Icon: List },
-  { id: "overview", label: "손익 현황",  Icon: BarChart2 },
-  { id: "dividend", label: "지분 정산",  Icon: Users },
-  { id: "report",   label: "리포트 출력", Icon: FileText },
+  { id: "sales",         label: "매출 관리",   Icon: TrendingUp },
+  { id: "expenses",      label: "지출 관리",   Icon: List       },
+  { id: "overview",      label: "손익 현황",   Icon: BarChart2  },
+  { id: "dividend",      label: "지분 정산",   Icon: Users      },
+  { id: "report",        label: "리포트 출력", Icon: FileText   },
+  { id: "closing",       label: "일일마감",    Icon: Wallet     },
+  { id: "fixed-setup",   label: "고정비 설정", Icon: Settings   },
+  { id: "fixed-monthly", label: "월별 고정비", Icon: BarChart2  },
 ];
 
 const AccountingPage = () => {
@@ -103,6 +110,21 @@ const AccountingPage = () => {
         {/* 리포트 출력 탭 */}
         {activeTab === "report" && (
           <MonthlyReport year={year} month={month} />
+        )}
+
+        {/* 일일마감 탭 — 운영관리에서 이동 */}
+        {activeTab === "closing" && (
+          <DailyClosingForm />
+        )}
+
+        {/* 고정비 설정 탭 — 운영관리에서 이동 */}
+        {activeTab === "fixed-setup" && (
+          <FixedCostSettings />
+        )}
+
+        {/* 월별 고정비 탭 — 운영관리에서 이동 */}
+        {activeTab === "fixed-monthly" && (
+          <FixedCostMonthly year={year} month={month} />
         )}
       </div>
     </div>

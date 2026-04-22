@@ -156,8 +156,12 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
         {/* 메뉴 목록 — 역할 기반 필터링 */}
         <nav className="flex-1 py-4 overflow-y-auto">
           {NAV_ITEMS.map(({ path, label, Icon, requiredPermission }) => {
-            // 해당 메뉴에 대한 권한이 없으면 표시하지 않음
-            if (!hasPermission(requiredPermission)) return null;
+            // 운영관리는 "operations" 또는 "operations_read" 중 하나라도 있으면 표시
+            // 나머지 메뉴는 requiredPermission 단순 체크
+            const canAccess =
+              hasPermission(requiredPermission) ||
+              (path === "/operations" && hasPermission("operations_read"));
+            if (!canAccess) return null;
 
             return (
               <NavLink

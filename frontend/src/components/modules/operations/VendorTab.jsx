@@ -301,7 +301,8 @@ const VendorModal = ({ isOpen, onClose, onSave, vendor }) => {
 
 
 // ── 메인 VendorTab 컴포넌트 ─────────────────────────────────
-const VendorTab = () => {
+// readOnly: true이면 등록·수정·삭제 버튼 숨김 (staff 읽기 전용 모드)
+const VendorTab = ({ readOnly = false }) => {
   const toast = useToast();
 
   // 데이터 상태
@@ -427,14 +428,16 @@ const VendorTab = () => {
           총 {vendors.length}개
         </span>
 
-        {/* 등록 버튼 */}
-        <button
-          onClick={handleAddClick}
-          className="h-9 px-4 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 flex items-center gap-2"
-        >
-          <Plus size={14} />
-          거래처 등록
-        </button>
+        {/* 등록 버튼 — readOnly 모드에서 숨김 */}
+        {!readOnly && (
+          <button
+            onClick={handleAddClick}
+            className="h-9 px-4 bg-blue-500 text-white rounded-md text-sm font-medium hover:bg-blue-600 flex items-center gap-2"
+          >
+            <Plus size={14} />
+            거래처 등록
+          </button>
+        )}
       </div>
 
       {/* ── 에러 메시지 ── */}
@@ -467,6 +470,7 @@ const VendorTab = () => {
               vendor={vendor}
               onEdit={handleEditClick}
               onDelete={handleDeleteClick}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -496,7 +500,8 @@ const VendorTab = () => {
 
 
 // ── 거래처 카드 서브 컴포넌트 ────────────────────────────────
-const VendorCard = ({ vendor, onEdit, onDelete }) => {
+// readOnly: true이면 수정·삭제 버튼 숨김
+const VendorCard = ({ vendor, onEdit, onDelete, readOnly = false }) => {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-100 p-4 hover:shadow-md transition-shadow">
       {/* 카드 헤더: 거래처명 + 카테고리 뱃지 + 버튼 */}
@@ -512,23 +517,25 @@ const VendorCard = ({ vendor, onEdit, onDelete }) => {
             <p className="text-xs text-slate-500 mt-0.5">담당: {vendor.contact_name}</p>
           )}
         </div>
-        {/* 수정/삭제 버튼 */}
-        <div className="flex items-center gap-1 ml-2 shrink-0">
-          <button
-            onClick={() => onEdit(vendor)}
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-blue-50 text-slate-400 hover:text-blue-500"
-            title="수정"
-          >
-            <Edit size={14} />
-          </button>
-          <button
-            onClick={() => onDelete(vendor)}
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
-            title="삭제"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        {/* 수정/삭제 버튼 — readOnly 모드에서 숨김 */}
+        {!readOnly && (
+          <div className="flex items-center gap-1 ml-2 shrink-0">
+            <button
+              onClick={() => onEdit(vendor)}
+              className="w-7 h-7 flex items-center justify-center rounded hover:bg-blue-50 text-slate-400 hover:text-blue-500"
+              title="수정"
+            >
+              <Edit size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(vendor)}
+              className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+              title="삭제"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 카드 본문: 연락처, 계좌, 결제일 정보 */}

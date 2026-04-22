@@ -1,6 +1,7 @@
 // ============================================================
 // OperationsPage.jsx — 운영 관리 메인 페이지 (Step 8, 마지막 모듈)
-// 4개 탭: 공지사항 / 위생점검 / 영업일 관리 / 업무 체크리스트
+// 6개 탭: 공지사항 / 위생점검 / 영업일 관리 / 업무 체크리스트 / 거래처 관리 / 이슈관리
+// ※ 일일마감·고정비 탭은 세무/회계(AccountingPage)로 이동됨
 // ============================================================
 
 import { useState } from "react";
@@ -13,39 +14,42 @@ import {
   ChevronLeft,
   ChevronRight,
   Store,
-  Wallet,
   AlertTriangle,
-  Settings,
-  BarChart2,
 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 import NoticeBoard          from "../components/modules/operations/NoticeBoard";
 import HygieneCheck         from "../components/modules/operations/HygieneCheck";
 import BusinessCalendar     from "../components/modules/operations/BusinessCalendar";
 import TaskChecklistPanel   from "../components/modules/operations/TaskChecklistPanel";
 import VendorTab            from "../components/modules/operations/VendorTab";
-import DailyClosingForm     from "../components/modules/operations/DailyClosingForm";
 import DailyIssueList       from "../components/modules/operations/DailyIssueList";
-import FixedCostSettings    from "../components/modules/operations/FixedCostSettings";
-import FixedCostMonthly     from "../components/modules/operations/FixedCostMonthly";
 
-// 9개 탭 정의 (고정비 설정 + 월별 고정비 추가)
+// 6개 탭 정의 (일일마감·고정비는 세무/회계로 이동)
 const TABS = [
-  { id: "notices",       label: "공지사항",       Icon: Bell          },
-  { id: "hygiene",       label: "위생 점검",       Icon: ShieldCheck   },
-  { id: "calendar",      label: "영업일 관리",      Icon: CalendarDays  },
-  { id: "tasks",         label: "업무 체크리스트",  Icon: CheckSquare   },
-  { id: "vendors",       label: "거래처 관리",      Icon: Store         },
-  { id: "closing",       label: "일일마감",         Icon: Wallet        },
-  { id: "issues",        label: "이슈관리",         Icon: AlertTriangle },
-  { id: "fixed-setup",   label: "고정비 설정",      Icon: Settings      },
-  { id: "fixed-monthly", label: "월별 고정비",      Icon: BarChart2     },
+  { id: "notices",  label: "공지사항",       Icon: Bell          },
+  { id: "hygiene",  label: "위생 점검",       Icon: ShieldCheck   },
+  { id: "calendar", label: "영업일 관리",      Icon: CalendarDays  },
+  { id: "tasks",    label: "업무 체크리스트",  Icon: CheckSquare   },
+  { id: "vendors",  label: "거래처 관리",      Icon: Store         },
+  { id: "issues",   label: "이슈관리",         Icon: AlertTriangle },
 ];
+
+// staff가 접근 가능한 탭 ID 목록 (이슈관리 제외)
+const STAFF_TABS = ["notices", "hygiene", "calendar", "tasks", "vendors"];
 
 const OperationsPage = () => {
   const today = new Date();
   const [year,  setYear]  = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [activeTab, setActiveTab] = useState("notices");
+
+  // staff 읽기 전용 여부 판단
+  const { user } = useAuth();
+  const isStaffReadOnly = user?.role === "staff";
+  // staff는 허용된 탭만 표시
+  const visibleTabs = isStaffReadOnly
+    ? TABS.filter((t) => STAFF_TABS.includes(t.id))
+    : TABS;
 
   // 이전 달 이동
   const handlePrevMonth = () => {
@@ -102,7 +106,7 @@ const OperationsPage = () => {
 
       {/* ── 탭 네비게이션 ── */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {TABS.map(({ id, label, Icon }) => (
+        {visibleTabs.map(({ id, label, Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
@@ -120,49 +124,34 @@ const OperationsPage = () => {
 
       {/* ── 탭 콘텐츠 ── */}
       <div>
-        {/* 공지사항 탭 */}
+        {/* 공지사항 탭 — staff readOnly 전달 */}
         {activeTab === "notices" && (
-          <NoticeBoard />
+          <NoticeBoard readOnly={isStaffReadOnly} />
         )}
 
-        {/* 위생 점검 탭 */}
+        {/* 위생 점검 탭 — staff readOnly 전달 */}
         {activeTab === "hygiene" && (
-          <HygieneCheck />
+          <HygieneCheck readOnly={isStaffReadOnly} />
         )}
 
-        {/* 영업일 관리 탭 */}
+        {/* 영업일 관리 탭 — staff readOnly 전달 */}
         {activeTab === "calendar" && (
-          <BusinessCalendar year={year} month={month} />
+          <BusinessCalendar year={year} month={month} readOnly={isStaffReadOnly} />
         )}
 
-        {/* 업무 체크리스트 탭 */}
+        {/* 업무 체크리스트 탭 — staff readOnly 전달 */}
         {activeTab === "tasks" && (
-          <TaskChecklistPanel />
+          <TaskChecklistPanel readOnly={isStaffReadOnly} />
         )}
 
-        {/* 거래처 관리 탭 */}
+        {/* 거래처 관리 탭 — staff readOnly 전달 */}
         {activeTab === "vendors" && (
-          <VendorTab />
+          <VendorTab readOnly={isStaffReadOnly} />
         )}
 
-        {/* 일일마감 탭 */}
-        {activeTab === "closing" && (
-          <DailyClosingForm />
-        )}
-
-        {/* 이슈관리 탭 */}
+        {/* 이슈관리 탭 — staff는 visibleTabs에서 제외되므로 도달 불가 */}
         {activeTab === "issues" && (
           <DailyIssueList />
-        )}
-
-        {/* 고정비 설정 탭 */}
-        {activeTab === "fixed-setup" && (
-          <FixedCostSettings />
-        )}
-
-        {/* 월별 고정비 탭 */}
-        {activeTab === "fixed-monthly" && (
-          <FixedCostMonthly />
         )}
       </div>
     </div>
