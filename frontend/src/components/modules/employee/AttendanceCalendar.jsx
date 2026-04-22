@@ -5,8 +5,8 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Loader2, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
-import { getWeeklyAttendance, bulkUpdateAttendance } from "../../../api/employeeApi";
+import { Loader2, ChevronLeft, ChevronRight, Calendar, LayoutGrid, List } from "lucide-react";
+import { getWeeklyAttendance, bulkUpdateAttendance, getMonthlyAttendanceCalendar } from "../../../api/employeeApi";
 
 // ─────────────────────────────────────────
 // 출근 상태 정의 (명세 기준 색상 포함)
@@ -173,23 +173,38 @@ const MemoPopover = ({ currentMemo, onSave, onClose }) => {
 // 메인 컴포넌트
 // ─────────────────────────────────────────
 
+// ─────────────────────────────────────────
+// 월별 뷰 — 파트별 색상
+// ─────────────────────────────────────────
+const PART_STYLE = {
+  hall:       { bg: "#DBEAFE", color: "#1D4ED8", label: "홀" },
+  kitchen:    { bg: "#FEF3C7", color: "#B45309", label: "주방" },
+  management: { bg: "#EDE9FE", color: "#6D28D9", label: "관리" },
+};
+
 /**
  * 주별 근무표 컴포넌트.
  * @param {object} props
- * @param {number} props.year - 초기 연도 (EmployeePage에서 전달, 현재 주 계산에 활용)
- * @param {number} props.month - 초기 월
+ * @param {number} props.year - 연도 (EmployeePage에서 전달)
+ * @param {number} props.month - 월
  */
 const AttendanceCalendar = ({ year, month }) => {
+  // 뷰 모드: "weekly"(주별) | "monthly"(월별)
+  const [viewMode, setViewMode] = useState("weekly");
+
+  // ── 주별 뷰 상태 ──
   // 현재 조회 기준 날짜 (이 날짜가 속한 주를 표시)
-  const [currentDate, setCurrentDate] = useState(() => {
-    // 초기값: 오늘 날짜
-    return todayStr();
-  });
+  const [currentDate, setCurrentDate] = useState(() => todayStr());
 
   // 주별 데이터 상태
   const [weekData, setWeekData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // ── 월별 뷰 상태 ──
+  const [monthData, setMonthData] = useState(null);
+  const [monthLoading, setMonthLoading] = useState(false);
+  const [monthError, setMonthError] = useState(null);
 
   // 열려 있는 드롭다운 셀 키 ("empId_date")
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -218,8 +233,26 @@ const AttendanceCalendar = ({ year, month }) => {
   }, []);
 
   useEffect(() => {
-    loadWeekData(currentDate);
-  }, [currentDate, loadWeekData]);
+    if (viewMode === "weekly") loadWeekData(currentDate);
+  }, [currentDate, loadWeekData, viewMode]);
+
+  // 월별 데이터 로드
+  const loadMonthData = useCallback(async (y, m) => {
+    try {
+      setMonthLoading(true);
+      setMonthError(null);
+      const data = await getMonthlyAttendanceCalendar(y, m);
+      setMonthData(data);
+    } catch (err) {
+      setMonthError(err.message || "월별 근태 데이터를 불러오지 못했습니다.");
+    } finally {
+      setMonthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewMode === "monthly") loadMonthData(year, month);
+  }, [viewMode, year, month, loadMonthData]);
 
   // ─────────────────────────────────────────
   // 주 네비게이션
@@ -350,6 +383,173 @@ const AttendanceCalendar = ({ year, month }) => {
   // 렌더링
   // ─────────────────────────────────────────
 
+  // ─────────────────────────────────────────
+  // 월별 캘린더 렌더링
+  // ─────────────────────────────────────────
+  const renderMonthlyView = () => {
+    if (monthLoading) {
+      return (
+        <div className="flex items-center justify-center py-20 text-slate-400">
+          <Loader2 size={24} className="animate-spin mr-2" />
+          월별 근무표를 불러오는 중...
+        </div>
+      );
+    }
+    if (monthError) {
+      return (
+        <div className="text-center py-20 text-red-500">
+          <p className="font-medium">{monthError}</p>
+          <button onClick={() => loadMonthData(year, month)} className="mt-3 text-sm text-blue-500 underline">
+            다시 시도
+          </button>
+        </div>
+      );
+    }
+    if (!monthData) return null;
+
+    // 해당 월의 달력 날짜 계산 (월요일 시작)
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const firstDow = new Date(year, month - 1, 1).getDay(); // 0=일,1=월,...
+    // 월요일 시작 offset (0=월,1=화,...,6=일)
+    const startOffset = (firstDow === 0 ? 6 : firstDow - 1);
+    const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+    const cells = Array.from({ length: totalCells }, (_, i) => {
+      const day = i - startOffset + 1;
+      return (day >= 1 && day <= daysInMonth) ? day : null;
+    });
+    const weeks = [];
+    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+    const DOW_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
+    const todayDate = new Date();
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        {/* 헤더 */}
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">
+            {year}년 {month}월 근무표
+          </h2>
+          <p className="text-xs text-slate-400">근무(work) 상태 직원만 표시</p>
+        </div>
+
+        <div className="p-4">
+          {/* 요일 헤더 */}
+          <div className="grid grid-cols-7 mb-1">
+            {DOW_LABELS.map((d, i) => (
+              <div key={d} className={`text-center text-xs font-semibold py-2 ${i >= 5 ? "text-red-400" : "text-slate-500"}`}>
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* 날짜 그리드 */}
+          {weeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-7 gap-0.5 mb-0.5">
+              {week.map((day, di) => {
+                if (!day) return <div key={di} className="min-h-[90px] bg-slate-50 rounded" />;
+
+                const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                const isToday = day === todayDate.getDate() && month === todayDate.getMonth() + 1 && year === todayDate.getFullYear();
+                const isWeekend = di >= 5;
+
+                // 해당 날짜에 "work" 상태인 직원 목록
+                const workingEmps = (monthData.employees || []).filter(emp => {
+                  const rec = monthData.attendance?.[String(emp.id)]?.[dateStr];
+                  return rec?.status === "work";
+                });
+
+                // 파트별 그룹핑
+                const byPart = {};
+                workingEmps.forEach(emp => {
+                  const part = emp.work_part || "hall";
+                  if (!byPart[part]) byPart[part] = [];
+                  byPart[part].push(emp.name);
+                });
+                const partOrder = ["hall", "kitchen", "management"];
+
+                return (
+                  <div
+                    key={di}
+                    className={`min-h-[90px] rounded p-1.5 border ${
+                      isToday
+                        ? "border-blue-400 bg-blue-50"
+                        : "border-slate-100 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    {/* 날짜 숫자 */}
+                    <div className={`text-xs font-semibold mb-1 ${
+                      isToday ? "text-blue-600" : isWeekend ? "text-red-400" : "text-slate-700"
+                    }`}>
+                      {day}
+                    </div>
+
+                    {/* 근무자 파트별 표시 */}
+                    <div className="flex flex-col gap-0.5">
+                      {partOrder.map(part => {
+                        const names = byPart[part];
+                        if (!names || names.length === 0) return null;
+                        const style = PART_STYLE[part] || PART_STYLE.hall;
+                        return (
+                          <div key={part} className="rounded px-1 py-0.5" style={{ backgroundColor: style.bg }}>
+                            <span className="text-[10px] font-semibold" style={{ color: style.color }}>
+                              {style.label}
+                            </span>
+                            <span className="text-[10px] ml-0.5" style={{ color: style.color }}>
+                              {names.join(", ")}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {workingEmps.length === 0 && (
+                        <span className="text-[10px] text-slate-300">-</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* 범례 */}
+        <div className="px-6 py-3 border-t border-slate-100 flex gap-3">
+          {Object.entries(PART_STYLE).map(([key, s]) => (
+            <span key={key} className="flex items-center gap-1 text-[11px]">
+              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: s.bg }} />
+              <span style={{ color: s.color }}>{s.label}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ─────────────────────────────────────────
+  // 주별 뷰 로딩/에러 처리
+  // ─────────────────────────────────────────
+  if (viewMode === "monthly") {
+    return (
+      <div>
+        {/* 뷰 토글 */}
+        <div className="flex gap-1 mb-4">
+          <button
+            onClick={() => setViewMode("weekly")}
+            className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-slate-200 rounded-md text-slate-500 hover:bg-slate-50 transition-colors"
+          >
+            <List size={14} /> 주별
+          </button>
+          <button
+            className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-blue-500 text-white rounded-md"
+          >
+            <LayoutGrid size={14} /> 월별
+          </button>
+        </div>
+        {renderMonthlyView()}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-slate-400">
@@ -407,6 +607,21 @@ const AttendanceCalendar = ({ year, month }) => {
       {/* ─── 상단 네비게이션 ─── */}
       <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
+          {/* 뷰 토글 버튼 */}
+          <div className="flex gap-1 mr-2">
+            <button
+              className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-blue-500 text-white rounded-md"
+            >
+              <List size={14} /> 주별
+            </button>
+            <button
+              onClick={() => setViewMode("monthly")}
+              className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium border border-slate-200 rounded-md text-slate-500 hover:bg-slate-50 transition-colors"
+            >
+              <LayoutGrid size={14} /> 월별
+            </button>
+          </div>
+
           {/* 이전 주 */}
           <button
             onClick={goToPrevWeek}

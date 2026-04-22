@@ -334,6 +334,7 @@ def get_monthly_calendar(db: Session, year: int, month: int) -> dict:
                 "name": e.name,
                 "employment_type": e.employment_type,
                 "position": e.position,
+                "work_part": e.work_part or "hall",
             }
             for e in employees
         ],
