@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, Save, User } from "lucide-react";
 import { createEmployee, updateEmployee } from "../../../api/employeeApi";
 import { useToast } from "../../../contexts/ToastContext";
+import { useAuth } from "../../../contexts/AuthContext";
 
 // 고용 형태 옵션
 const EMPLOYMENT_TYPE_OPTIONS = [
@@ -54,6 +55,10 @@ const CONTRACT_TYPE_OPTIONS = [
  */
 const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
   const toast = useToast();
+  // 현재 로그인 사용자 역할 확인
+  const { user } = useAuth();
+  // manager 역할 여부 — true면 급여 관련 필드 숨김
+  const isManager = user?.role === "manager";
   // 첫 번째 입력 필드 포커스용 ref
   const firstInputRef = useRef(null);
 
@@ -152,20 +157,23 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
       newErrors.name = "이름을 입력해주세요.";
     }
 
-    if (form.contract_type === "일급" || form.salary_type === "DAILY") {
-      // 일급 계약형태 또는 일급제: daily_wage 필수
-      if (!form.daily_wage || Number(form.daily_wage) <= 0) {
-        newErrors.daily_wage = "일급을 입력해주세요.";
-      }
-    } else if (form.salary_type === "HOURLY") {
-      if (!form.hourly_wage || Number(form.hourly_wage) <= 0) {
-        newErrors.hourly_wage = "시급을 입력해주세요.";
-      } else if (Number(form.hourly_wage) < 10030) {
-        newErrors.hourly_wage = "2026년 최저임금(10,030원)보다 높게 설정해주세요.";
-      }
-    } else {
-      if (!form.monthly_salary || Number(form.monthly_salary) <= 0) {
-        newErrors.monthly_salary = "월급을 입력해주세요.";
+    // manager는 급여 필드가 숨겨져 있으므로 급여 유효성 검사 건너뜀
+    if (!isManager) {
+      if (form.contract_type === "일급" || form.salary_type === "DAILY") {
+        // 일급 계약형태 또는 일급제: daily_wage 필수
+        if (!form.daily_wage || Number(form.daily_wage) <= 0) {
+          newErrors.daily_wage = "일급을 입력해주세요.";
+        }
+      } else if (form.salary_type === "HOURLY") {
+        if (!form.hourly_wage || Number(form.hourly_wage) <= 0) {
+          newErrors.hourly_wage = "시급을 입력해주세요.";
+        } else if (Number(form.hourly_wage) < 10030) {
+          newErrors.hourly_wage = "2026년 최저임금(10,030원)보다 높게 설정해주세요.";
+        }
+      } else {
+        if (!form.monthly_salary || Number(form.monthly_salary) <= 0) {
+          newErrors.monthly_salary = "월급을 입력해주세요.";
+        }
       }
     }
 
@@ -442,108 +450,112 @@ const EmployeeFormModal = ({ employee, onClose, onSaved }) => {
             />
           </div>
 
-          {/* 급여 유형 + 금액 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">급여 유형</label>
-              <select
-                name="salary_type"
-                value={form.salary_type}
-                onChange={handleChange}
-                className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                {SALARY_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              {form.salary_type === "HOURLY" ? (
-                <>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">
-                    시급 <span className="text-red-500">*</span>
-                    <span className="text-slate-400 font-normal ml-1">(최저 10,030원)</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      name="hourly_wage"
-                      value={form.hourly_wage}
-                      onChange={handleChange}
-                      placeholder="10030"
-                      min={10030}
-                      className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.hourly_wage ? "border-red-400" : "border-slate-200"
-                      }`}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
-                  </div>
-                  {errors.hourly_wage && <p className="text-xs text-red-500 mt-1">{errors.hourly_wage}</p>}
-                </>
-              ) : form.salary_type === "DAILY" ? (
-                <>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">
-                    일급 <span className="text-red-500">*</span>
-                    <span className="text-slate-400 font-normal ml-1">(원/일)</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      name="daily_wage"
-                      value={form.daily_wage}
-                      onChange={handleChange}
-                      placeholder="120000"
-                      min={0}
-                      className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.daily_wage ? "border-red-400" : "border-slate-200"
-                      }`}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
-                  </div>
-                  {errors.daily_wage && <p className="text-xs text-red-500 mt-1">{errors.daily_wage}</p>}
-                </>
-              ) : (
-                <>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">
-                    월급 <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      name="monthly_salary"
-                      value={form.monthly_salary}
-                      onChange={handleChange}
-                      placeholder="2000000"
-                      className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        errors.monthly_salary ? "border-red-400" : "border-slate-200"
-                      }`}
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
-                  </div>
-                  {errors.monthly_salary && <p className="text-xs text-red-500 mt-1">{errors.monthly_salary}</p>}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* 4대보험 */}
-          <div>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                name="has_insurance"
-                checked={form.has_insurance}
-                onChange={handleChange}
-                className="w-4 h-4 rounded text-blue-500"
-              />
+          {/* 급여 유형 + 금액 — manager에게는 비표시 */}
+          {!isManager && (
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-sm font-medium text-slate-700">4대보험 적용</span>
-                <span className="text-xs text-slate-400 ml-2">
-                  (국민연금 4.5% · 건강보험 3.545% · 장기요양 · 고용보험 0.9%)
-                </span>
+                <label className="block text-xs font-medium text-slate-500 mb-1">급여 유형</label>
+                <select
+                  name="salary_type"
+                  value={form.salary_type}
+                  onChange={handleChange}
+                  className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {SALARY_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
-            </label>
-          </div>
+              <div>
+                {form.salary_type === "HOURLY" ? (
+                  <>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      시급 <span className="text-red-500">*</span>
+                      <span className="text-slate-400 font-normal ml-1">(최저 10,030원)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="hourly_wage"
+                        value={form.hourly_wage}
+                        onChange={handleChange}
+                        placeholder="10030"
+                        min={10030}
+                        className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          errors.hourly_wage ? "border-red-400" : "border-slate-200"
+                        }`}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                    </div>
+                    {errors.hourly_wage && <p className="text-xs text-red-500 mt-1">{errors.hourly_wage}</p>}
+                  </>
+                ) : form.salary_type === "DAILY" ? (
+                  <>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      일급 <span className="text-red-500">*</span>
+                      <span className="text-slate-400 font-normal ml-1">(원/일)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="daily_wage"
+                        value={form.daily_wage}
+                        onChange={handleChange}
+                        placeholder="120000"
+                        min={0}
+                        className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          errors.daily_wage ? "border-red-400" : "border-slate-200"
+                        }`}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                    </div>
+                    {errors.daily_wage && <p className="text-xs text-red-500 mt-1">{errors.daily_wage}</p>}
+                  </>
+                ) : (
+                  <>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      월급 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="monthly_salary"
+                        value={form.monthly_salary}
+                        onChange={handleChange}
+                        placeholder="2000000"
+                        className={`w-full h-9 px-3 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          errors.monthly_salary ? "border-red-400" : "border-slate-200"
+                        }`}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">원</span>
+                    </div>
+                    {errors.monthly_salary && <p className="text-xs text-red-500 mt-1">{errors.monthly_salary}</p>}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 4대보험 — manager에게는 비표시 */}
+          {!isManager && (
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="has_insurance"
+                  checked={form.has_insurance}
+                  onChange={handleChange}
+                  className="w-4 h-4 rounded text-blue-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-slate-700">4대보험 적용</span>
+                  <span className="text-xs text-slate-400 ml-2">
+                    (국민연금 4.5% · 건강보험 3.545% · 장기요양 · 고용보험 0.9%)
+                  </span>
+                </div>
+              </label>
+            </div>
+          )}
 
           {/* 입사일 + 퇴사일 */}
           <div className="grid grid-cols-2 gap-4">

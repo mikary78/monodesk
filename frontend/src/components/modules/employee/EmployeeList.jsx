@@ -17,6 +17,7 @@ import {
 } from "../../../api/employeeApi";
 import EmployeeFormModal from "./EmployeeFormModal";
 import { useToast } from "../../../contexts/ToastContext";
+import { useAuth } from "../../../contexts/AuthContext";
 import ConfirmDialog from "../../common/ConfirmDialog";
 
 /**
@@ -24,6 +25,10 @@ import ConfirmDialog from "../../common/ConfirmDialog";
  */
 const EmployeeList = () => {
   const toast = useToast();
+  // 현재 로그인 사용자 역할 확인
+  const { user } = useAuth();
+  // manager 역할 여부 — true면 급여 정보 비표시
+  const isManager = user?.role === "manager";
   // 직원 목록 상태
   const [employees, setEmployees] = useState([]);
   // 로딩 상태
@@ -173,30 +178,40 @@ const EmployeeList = () => {
   };
 
   // 계약형태별 섹션 정의
-  const sections = [
-    {
-      key: "4대보험",
-      label: "정직원",
-      employees: filteredEmployees.filter(
-        (e) => e.contract_type === "4대보험" || (!e.contract_type && e.employment_type === "FULL_TIME")
-      ),
-      badgeColor: "bg-blue-100 text-blue-700",
-    },
-    {
-      key: "3.3%",
-      label: "계약직 (3.3%)",
-      employees: filteredEmployees.filter((e) => e.contract_type === "3.3%"),
-      badgeColor: "bg-purple-100 text-purple-700",
-    },
-    {
-      key: "시급알바",
-      label: "아르바이트",
-      employees: filteredEmployees.filter(
-        (e) => e.contract_type === "시급알바" || (!e.contract_type && e.employment_type === "PART_TIME")
-      ),
-      badgeColor: "bg-amber-100 text-amber-700",
-    },
-  ];
+  // manager는 급여 구분 노출을 피하기 위해 "전체 직원" 단일 섹션으로 표시
+  const sections = isManager
+    ? [
+        {
+          key: "all",
+          label: "전체 직원",
+          employees: filteredEmployees,
+          badgeColor: "bg-slate-100 text-slate-600",
+        },
+      ]
+    : [
+        {
+          key: "4대보험",
+          label: "정직원",
+          employees: filteredEmployees.filter(
+            (e) => e.contract_type === "4대보험" || (!e.contract_type && e.employment_type === "FULL_TIME")
+          ),
+          badgeColor: "bg-blue-100 text-blue-700",
+        },
+        {
+          key: "3.3%",
+          label: "계약직 (3.3%)",
+          employees: filteredEmployees.filter((e) => e.contract_type === "3.3%"),
+          badgeColor: "bg-purple-100 text-purple-700",
+        },
+        {
+          key: "시급알바",
+          label: "아르바이트",
+          employees: filteredEmployees.filter(
+            (e) => e.contract_type === "시급알바" || (!e.contract_type && e.employment_type === "PART_TIME")
+          ),
+          badgeColor: "bg-amber-100 text-amber-700",
+        },
+      ];
 
   if (loading) {
     return (
@@ -363,33 +378,37 @@ const EmployeeList = () => {
 
                         {/* 우측 정보 + 버튼 영역 */}
                         <div className="flex items-center gap-4">
-                          {/* 급여 정보 */}
-                          <div className="text-right">
-                            <div className="text-sm font-semibold text-slate-900">
-                              {emp.salary_type === "HOURLY"
-                                ? `${formatCurrency(emp.hourly_wage)} / 시`
-                                : formatCurrency(emp.monthly_salary)}
+                          {/* 급여 정보 — manager에게는 비표시 */}
+                          {!isManager && (
+                            <div className="text-right">
+                              <div className="text-sm font-semibold text-slate-900">
+                                {emp.salary_type === "HOURLY"
+                                  ? `${formatCurrency(emp.hourly_wage)} / 시`
+                                  : formatCurrency(emp.monthly_salary)}
+                              </div>
+                              <div className="text-xs text-slate-400 mt-0.5">
+                                {formatSalaryType(emp.salary_type)}
+                                {/* 3.3% 계약직 안내 */}
+                                {emp.contract_type === "3.3%" && (
+                                  <span className="ml-1">(3.3% 원천징수)</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-xs text-slate-400 mt-0.5">
-                              {formatSalaryType(emp.salary_type)}
-                              {/* 3.3% 계약직 안내 */}
-                              {emp.contract_type === "3.3%" && (
-                                <span className="ml-1">(3.3% 원천징수)</span>
-                              )}
-                            </div>
-                          </div>
+                          )}
 
-                          {/* 4대보험 아이콘 */}
-                          <div className="flex flex-col items-center">
-                            {emp.has_insurance ? (
-                              <ShieldCheck size={20} className="text-green-500" title="4대보험 적용" />
-                            ) : (
-                              <ShieldOff size={20} className="text-slate-300" title="4대보험 미적용" />
-                            )}
-                            <span className="text-xs text-slate-400 mt-0.5">
-                              {emp.has_insurance ? "4대보험" : "미적용"}
-                            </span>
-                          </div>
+                          {/* 4대보험 아이콘 — manager에게는 비표시 */}
+                          {!isManager && (
+                            <div className="flex flex-col items-center">
+                              {emp.has_insurance ? (
+                                <ShieldCheck size={20} className="text-green-500" title="4대보험 적용" />
+                              ) : (
+                                <ShieldOff size={20} className="text-slate-300" title="4대보험 미적용" />
+                              )}
+                              <span className="text-xs text-slate-400 mt-0.5">
+                                {emp.has_insurance ? "4대보험" : "미적용"}
+                              </span>
+                            </div>
+                          )}
 
                           {/* 입사일 */}
                           <div className="text-right">

@@ -22,9 +22,22 @@ import {
 } from "../../../api/menuApi";
 import ConfirmDialog from "../../common/ConfirmDialog";
 
+// 재료 구분 옵션
+const INGREDIENT_TYPE_OPTIONS = ["원재료", "부재료", "양념", "소스", "기타"];
+
+// 재료 구분별 뱃지 스타일 매핑
+const INGREDIENT_TYPE_BADGE = {
+  원재료: "bg-blue-50 text-blue-600",
+  부재료: "bg-green-50 text-green-600",
+  양념: "bg-orange-50 text-orange-600",
+  소스: "bg-purple-50 text-purple-600",
+  기타: "bg-slate-100 text-slate-500",
+};
+
 // 신규 재료 입력 폼 초기값
 const EMPTY_ING = {
   ingredient_name: "",
+  ingredient_type: "원재료",
   quantity: "",
   unit: "g",
   unit_price: "",
@@ -152,6 +165,7 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
     try {
       await addIngredient(menuItem.id, {
         ingredient_name: newIng.ingredient_name.trim(),
+        ingredient_type: newIng.ingredient_type || "원재료",
         quantity: Number(newIng.quantity),
         unit: newIng.unit || "g",
         unit_price: newIng.unit_price ? Number(newIng.unit_price) : 0,
@@ -175,6 +189,7 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
     setEditingId(ing.id);
     setEditForm({
       ingredient_name: ing.ingredient_name,
+      ingredient_type: ing.ingredient_type || "원재료",
       quantity: String(ing.quantity),
       unit: ing.unit || "g",
       unit_price: String(ing.unit_price || ""),
@@ -232,6 +247,7 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
     try {
       await updateIngredient(ingredientId, {
         ingredient_name: editForm.ingredient_name.trim(),
+        ingredient_type: editForm.ingredient_type || "원재료",
         quantity: Number(editForm.quantity),
         unit: editForm.unit || "g",
         unit_price: editForm.unit_price ? Number(editForm.unit_price) : 0,
@@ -351,6 +367,8 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
               <table className="w-full text-sm mb-4">
                 <thead>
                   <tr className="bg-slate-50 text-xs text-slate-500 uppercase">
+                    {/* 재료 구분 열 */}
+                    <th className="text-left px-3 py-2 w-20">구분</th>
                     <th className="text-left px-3 py-2">재료명</th>
                     <th className="text-right px-3 py-2">수량</th>
                     <th className="text-left px-2 py-2">단위</th>
@@ -365,6 +383,19 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
                     editingId === ing.id ? (
                       /* ── 편집 모드 행 ──────────────────────────── */
                       <tr key={ing.id} className="border-b border-blue-100 bg-blue-50">
+                        {/* 재료 구분 select — 편집 모드 */}
+                        <td className="px-2 py-1.5">
+                          <select
+                            name="ingredient_type"
+                            value={editForm.ingredient_type || "원재료"}
+                            onChange={handleEditFormChange}
+                            className="w-full h-7 px-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:border-blue-400"
+                          >
+                            {INGREDIENT_TYPE_OPTIONS.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </td>
                         {/* 재료명 — 재고 드롭다운 + 직접 입력 */}
                         <td className="px-2 py-1.5">
                           {inventoryItems.length > 0 && (
@@ -455,6 +486,14 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
                     ) : (
                       /* ── 일반 표시 행 ──────────────────────────── */
                       <tr key={ing.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        {/* 재료 구분 뱃지 */}
+                        <td className="px-3 py-2">
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                            INGREDIENT_TYPE_BADGE[ing.ingredient_type] || INGREDIENT_TYPE_BADGE["기타"]
+                          }`}>
+                            {ing.ingredient_type || "원재료"}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 font-medium text-slate-800">
                           {ing.ingredient_name}
                           {/* 재고 연동 표시 뱃지 */}
@@ -532,8 +571,22 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
 
             {/* 재료 상세 입력 필드 */}
             <div className="grid grid-cols-12 gap-2 items-end">
-              {/* 재료명 */}
-              <div className="col-span-4">
+              {/* 재료 구분 */}
+              <div className="col-span-2">
+                <label className="block text-xs text-slate-500 mb-1">구분</label>
+                <select
+                  name="ingredient_type"
+                  value={newIng.ingredient_type}
+                  onChange={handleNewIngChange}
+                  className="w-full h-8 px-1 border border-slate-200 rounded text-xs bg-white focus:outline-none focus:border-blue-500"
+                >
+                  {INGREDIENT_TYPE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              {/* 재료명 — 구분(2) + 재료명(3) + 수량(2) + 단위(2) + 단가(2) + 버튼(1) = 12 */}
+              <div className="col-span-3">
                 <label className="block text-xs text-slate-500 mb-1">재료명</label>
                 <input
                   type="text"
@@ -572,7 +625,7 @@ const IngredientsModal = ({ isOpen, onClose, menuItem, onCostUpdate }) => {
                 </select>
               </div>
               {/* 단가 */}
-              <div className="col-span-3">
+              <div className="col-span-2">
                 <label className="block text-xs text-slate-500 mb-1">단가 (원)</label>
                 <input
                   type="number"

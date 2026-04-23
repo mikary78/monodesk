@@ -123,6 +123,8 @@ class MenuIngredient(Base):
         nullable=True,
         comment="재고 품목 ID (선택)"
     )
+    # 재료 구분: 원재료 / 부재료 / 양념 / 소스 / 기타
+    ingredient_type = Column(String(20), default="원재료", comment="재료 구분")
     # 사용 수량
     quantity = Column(Float, nullable=False, comment="사용 수량")
     # 단위 (g, ml, 개 등)

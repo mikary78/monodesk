@@ -49,6 +49,7 @@ class MenuCategoryResponse(MenuCategoryBase):
 class MenuIngredientBase(BaseModel):
     """메뉴 구성 재료 공통 필드"""
     ingredient_name: str = Field(..., min_length=1, max_length=100, description="재료명")
+    ingredient_type: str = Field("원재료", max_length=20, description="재료 구분 (원재료/부재료/양념/소스/기타)")
     inventory_item_id: Optional[int] = Field(None, gt=0, description="재고 품목 ID (선택)")
     quantity: float = Field(..., gt=0, description="사용 수량")
     unit: str = Field("g", max_length=20, description="단위 (g, ml, 개 등)")
@@ -63,6 +64,7 @@ class MenuIngredientCreate(MenuIngredientBase):
 class MenuIngredientUpdate(BaseModel):
     """메뉴 구성 재료 수정 요청 스키마 (부분 수정 허용)"""
     ingredient_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    ingredient_type: Optional[str] = Field(None, max_length=20)
     inventory_item_id: Optional[int] = Field(None, gt=0)
     quantity: Optional[float] = Field(None, gt=0)
     unit: Optional[str] = Field(None, max_length=20)

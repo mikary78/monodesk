@@ -2,7 +2,8 @@
 // EmployeePage.jsx — 직원 관리 메인 페이지
 // 4개 탭: 직원 목록 / 출퇴근 관리 / 급여 정산 / 근무표 달력
 // staff 역할: 근무표 달력 탭만 표시 (초기 탭도 calendar)
-// admin/manager: 4개 탭 모두 표시 (초기 탭 employees)
+// manager 역할: 급여 정산 탭 제외, 나머지 3개 탭 표시 (초기 탭 employees)
+// admin: 4개 탭 모두 표시
 // ============================================================
 
 import { useState } from "react";
@@ -27,17 +28,24 @@ const EmployeePage = () => {
 
   // staff 역할 여부 — 근무표 달력 탭만 접근 가능
   const isStaff = user?.role === "staff";
+  // manager 역할 여부 — 급여 정산 탭 제외
+  const isManager = user?.role === "manager";
 
   // 현재 선택된 연도/월 상태
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
-  // 현재 활성 탭 — staff면 calendar, 그 외는 employees
+  // 현재 활성 탭 — staff/manager면 calendar/employees, 그 외는 employees
   const [activeTab, setActiveTab] = useState(isStaff ? "calendar" : "employees");
 
-  // 표시할 탭 목록 — staff는 근무표 달력만, 그 외는 전체
+  // 표시할 탭 목록
+  // - staff: 근무표 달력만
+  // - manager: 급여 정산 탭 제외 (직원 목록/출퇴근/근무표 달력 표시)
+  // - admin: 전체 4개 탭
   const visibleTabs = isStaff
     ? TABS.filter((t) => t.id === "calendar")
+    : isManager
+    ? TABS.filter((t) => t.id !== "salary")
     : TABS;
 
   /**
