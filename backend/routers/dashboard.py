@@ -10,8 +10,8 @@ from schemas.dashboard import DashboardResponse, DailyKpiResponse, WeeklyKpiResp
 import services.dashboard_service as service
 from auth import require_role
 
-# 라우터 인스턴스 생성 — admin/manager 전용 (라우터 레벨 권한 적용)
-router = APIRouter(dependencies=[Depends(require_role("admin", "manager"))])
+# 라우터 인스턴스 생성 — 모든 로그인 사용자 접근 허용 (staff 포함)
+router = APIRouter(dependencies=[Depends(require_role("admin", "manager", "staff"))])
 
 
 @router.get("/summary", response_model=DashboardResponse)

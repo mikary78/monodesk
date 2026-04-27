@@ -8,14 +8,16 @@
 //   - onClose: 메뉴 항목 클릭 시 사이드바 닫기 콜백
 // ============================================================
 
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, DollarSign, TrendingUp, Package,
   UtensilsCrossed, Users, Building2, ClipboardList, FileText,
-  Settings, LogOut, UserCog,
+  Settings, LogOut, UserCog, KeyRound,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import ClockWidget from "./ClockWidget";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 // ─────────────────────────────────────────
 // 메뉴 목록 — 역할별 권한 키 연결
@@ -90,6 +92,7 @@ const NAV_ITEMS = [
  */
 const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const { user, hasPermission, logout } = useAuth();
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   /**
    * 로그아웃 버튼 클릭 핸들러.
@@ -205,7 +208,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
           )}
         </nav>
 
-        {/* 하단 고정: 설정 + 로그아웃 */}
+        {/* 하단 고정: 설정 + 비밀번호 변경 + 로그아웃 */}
         <div className="border-t border-slate-700">
           {/* 설정 메뉴 */}
           <NavLink
@@ -223,6 +226,15 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             설정
           </NavLink>
 
+          {/* 비밀번호 변경 */}
+          <button
+            onClick={() => setShowChangePassword(true)}
+            className="w-full flex items-center gap-3 px-5 py-3 text-sm text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+          >
+            <KeyRound size={20} />
+            비밀번호 변경
+          </button>
+
           {/* 로그아웃 버튼 */}
           <button
             onClick={handleLogout}
@@ -233,6 +245,11 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
           </button>
         </div>
       </aside>
+
+      {/* 비밀번호 변경 모달 */}
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </>
   );
 };

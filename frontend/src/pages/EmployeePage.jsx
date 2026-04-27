@@ -147,9 +147,9 @@ const EmployeePage = () => {
           <SalaryPanel year={year} month={month} />
         )}
 
-        {/* 근무표 달력 탭 */}
+        {/* 근무표 달력 탭 — staff는 읽기 전용 */}
         {activeTab === "calendar" && (
-          <AttendanceCalendar year={year} month={month} />
+          <AttendanceCalendar year={year} month={month} readOnly={isStaff} />
         )}
       </div>
     </div>

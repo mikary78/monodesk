@@ -76,6 +76,35 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.post("/change-password")
+def change_password(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    현재 로그인한 사용자의 비밀번호 변경.
+    현재 비밀번호를 확인한 후 새 비밀번호로 교체합니다.
+    """
+    current_pw = data.get("current_password", "")
+    new_pw = data.get("new_password", "")
+
+    if not current_pw or not new_pw:
+        raise HTTPException(status_code=400, detail="현재 비밀번호와 새 비밀번호를 모두 입력해주세요.")
+
+    if len(new_pw) < 4:
+        raise HTTPException(status_code=400, detail="새 비밀번호는 4자 이상이어야 합니다.")
+
+    if not verify_password(current_pw, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="현재 비밀번호가 올바르지 않습니다.")
+
+    current_user.password_hash = get_password_hash(new_pw)
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"success": True, "message": "비밀번호가 변경되었습니다."}
+
+
 @router.post("/logout")
 def logout():
     """
