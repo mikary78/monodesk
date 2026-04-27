@@ -1,7 +1,8 @@
 // ============================================================
 // OperationsPage.jsx — 운영 관리 메인 페이지 (Step 8, 마지막 모듈)
-// 6개 탭: 공지사항 / 위생점검 / 영업일 관리 / 업무 체크리스트 / 거래처 관리 / 이슈관리
+// 5개 탭: 공지사항 / 위생점검 / 영업일 관리 / 업무 체크리스트 / 이슈관리
 // ※ 일일마감·고정비 탭은 세무/회계(AccountingPage)로 이동됨
+// ※ 거래처 관리는 재고/발주(InventoryPage)로 이동됨
 // ============================================================
 
 import { useState } from "react";
@@ -13,7 +14,6 @@ import {
   CheckSquare,
   ChevronLeft,
   ChevronRight,
-  Store,
   AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -21,21 +21,19 @@ import NoticeBoard          from "../components/modules/operations/NoticeBoard";
 import HygieneCheck         from "../components/modules/operations/HygieneCheck";
 import BusinessCalendar     from "../components/modules/operations/BusinessCalendar";
 import TaskChecklistPanel   from "../components/modules/operations/TaskChecklistPanel";
-import VendorTab            from "../components/modules/operations/VendorTab";
 import DailyIssueList       from "../components/modules/operations/DailyIssueList";
 
-// 6개 탭 정의 (일일마감·고정비는 세무/회계로 이동)
+// 5개 탭 정의 (거래처 관리는 재고/발주로 이동)
 const TABS = [
   { id: "notices",  label: "공지사항",       Icon: Bell          },
   { id: "hygiene",  label: "위생 점검",       Icon: ShieldCheck   },
   { id: "calendar", label: "영업일 관리",      Icon: CalendarDays  },
   { id: "tasks",    label: "업무 체크리스트",  Icon: CheckSquare   },
-  { id: "vendors",  label: "거래처 관리",      Icon: Store         },
   { id: "issues",   label: "이슈관리",         Icon: AlertTriangle },
 ];
 
 // staff가 접근 가능한 탭 ID 목록 (이슈관리 제외)
-const STAFF_TABS = ["notices", "hygiene", "calendar", "tasks", "vendors"];
+const STAFF_TABS = ["notices", "hygiene", "calendar", "tasks"];
 
 const OperationsPage = () => {
   const today = new Date();
@@ -142,11 +140,6 @@ const OperationsPage = () => {
         {/* 업무 체크리스트 탭 — staff readOnly 전달 */}
         {activeTab === "tasks" && (
           <TaskChecklistPanel readOnly={isStaffReadOnly} />
-        )}
-
-        {/* 거래처 관리 탭 — staff readOnly 전달 */}
-        {activeTab === "vendors" && (
-          <VendorTab readOnly={isStaffReadOnly} />
         )}
 
         {/* 이슈관리 탭 — staff는 visibleTabs에서 제외되므로 도달 불가 */}

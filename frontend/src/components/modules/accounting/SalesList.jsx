@@ -79,9 +79,10 @@ const SalesList = ({ year, month }) => {
       cash: acc.cash + (s.cash_amount || 0),
       card: acc.card + (s.card_amount || 0),
       delivery: acc.delivery + (s.delivery_amount || 0),
+      catchtable: acc.catchtable + (s.catchtable_amount || 0),
       total: acc.total + (s.total_sales || 0),
     }),
-    { cash: 0, card: 0, delivery: 0, total: 0 }
+    { cash: 0, card: 0, delivery: 0, catchtable: 0, total: 0 }
   );
 
   return (
@@ -130,11 +131,12 @@ const SalesList = ({ year, month }) => {
 
       {/* 월 합계 카드 */}
       {salesList.length > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
           {[
             { label: "카드", value: totals.card, color: "text-blue-600" },
             { label: "현금", value: totals.cash, color: "text-green-600" },
             { label: "배달", value: totals.delivery, color: "text-purple-600" },
+            { label: "캐치테이블", value: totals.catchtable, color: "text-orange-600" },
             { label: "합계", value: totals.total, color: "text-slate-900" },
           ].map(({ label, value, color }) => (
             <div key={label} className="bg-slate-50 rounded-lg p-3">
@@ -167,6 +169,7 @@ const SalesList = ({ year, month }) => {
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">카드</th>
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">현금</th>
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">배달</th>
+                <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">캐치테이블</th>
                 <th className="text-right py-2.5 px-3 text-xs font-medium text-slate-500">합계</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-slate-500">메모</th>
                 <th className="py-2.5 px-3" />
@@ -187,6 +190,9 @@ const SalesList = ({ year, month }) => {
                   </td>
                   <td className="py-2.5 px-3 text-right text-purple-700 font-medium">
                     {formatCurrency(item.delivery_amount)}
+                  </td>
+                  <td className="py-2.5 px-3 text-right text-orange-600 font-medium">
+                    {item.catchtable_amount > 0 ? formatCurrency(item.catchtable_amount) : <span className="text-slate-300">-</span>}
                   </td>
                   <td className="py-2.5 px-3 text-right font-semibold text-slate-900">
                     {formatCurrency(item.total_sales)}

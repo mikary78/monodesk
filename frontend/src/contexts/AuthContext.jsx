@@ -36,7 +36,7 @@ const ROLE_PERMISSIONS = {
   staff: [
     "dashboard",            // 대시보드 조회 허용
     "employee_attendance",  // 근무표 조회 허용
-    "operations_read",      // 운영관리 읽기 전용 접근 (공지/위생/영업일/업무체크/거래처)
+    "operations_read",      // 운영관리 읽기 전용 접근 (공지/위생/영업일/업무체크)
   ],
 };
 

@@ -83,6 +83,8 @@ def add_missing_columns():
         # SQLite: IF NOT EXISTS 미지원 — 오류 캐치로 처리
         migrations = [
             "ALTER TABLE users ADD COLUMN employee_id INTEGER",
+            "ALTER TABLE sales_records ADD COLUMN catchtable_count INTEGER DEFAULT 0",
+            "ALTER TABLE sales_records ADD COLUMN catchtable_amount FLOAT DEFAULT 0",
         ]
         with engine.connect() as conn:
             for sql in migrations:
@@ -95,6 +97,8 @@ def add_missing_columns():
         # PostgreSQL: ADD COLUMN IF NOT EXISTS 지원
         migrations = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id INTEGER",
+            "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS catchtable_count INTEGER DEFAULT 0",
+            "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS catchtable_amount FLOAT DEFAULT 0",
         ]
         with engine.connect() as conn:
             for sql in migrations:

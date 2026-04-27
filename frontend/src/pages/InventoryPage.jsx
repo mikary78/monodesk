@@ -6,8 +6,9 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Package, AlertTriangle, ShoppingCart, Truck,
-  RotateCcw, BarChart2, Archive
+  RotateCcw, BarChart2, Archive, Store
 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 import { fetchInventorySummary, seedInventoryCategories } from "../api/inventoryApi";
 import InventoryItemTab from "../components/modules/inventory/InventoryItemTab";
 import PurchaseOrderTab from "../components/modules/inventory/PurchaseOrderTab";
@@ -16,6 +17,8 @@ import AdjustmentHistoryTab from "../components/modules/inventory/AdjustmentHist
 import DailyPriceGrid from "../components/modules/inventory/DailyPriceGrid";
 // 월초/월말 재고 스냅샷 컴포넌트
 import InventorySnapshot from "../components/modules/inventory/InventorySnapshot";
+// 거래처 관리 (admin/manager 전용, 운영관리에서 이동)
+import VendorTab from "../components/modules/operations/VendorTab";
 
 // ─────────────────────────────────────────
 // KPI 요약 카드 컴포넌트
@@ -77,13 +80,15 @@ const LowStockBanner = ({ items, onDismiss }) => {
 // 탭 버튼 컴포넌트
 // ─────────────────────────────────────────
 
+// roles: null → 전체 허용 / ["admin","manager"] → admin·manager만 표시
 const TAB_LIST = [
-  { id: "items",          label: "재고 품목",   icon: Package   },
-  { id: "orders",         label: "발주서",      icon: Truck     },
-  { id: "history",        label: "조정 이력",   icon: RotateCcw },
-  { id: "daily-price",    label: "데일리 단가", icon: BarChart2 },
-  { id: "snapshot-start", label: "월초재고",    icon: Archive   },
-  { id: "snapshot-end",   label: "월말재고",    icon: Archive   },
+  { id: "items",          label: "재고 품목",   icon: Package,  roles: null                   },
+  { id: "orders",         label: "발주서",      icon: Truck,    roles: null                   },
+  { id: "history",        label: "조정 이력",   icon: RotateCcw, roles: null                  },
+  { id: "daily-price",    label: "데일리 단가", icon: BarChart2, roles: null                  },
+  { id: "snapshot-start", label: "월초재고",    icon: Archive,  roles: null                   },
+  { id: "snapshot-end",   label: "월말재고",    icon: Archive,  roles: null                   },
+  { id: "vendors",        label: "거래처 관리", icon: Store,    roles: ["admin", "manager"]   },
 ];
 
 // ─────────────────────────────────────────
@@ -93,6 +98,12 @@ const TAB_LIST = [
 const InventoryPage = () => {
   // 현재 활성 탭
   const [activeTab, setActiveTab] = useState("items");
+
+  // 역할 기반 탭 필터링 (거래처 관리: admin/manager만)
+  const { user } = useAuth();
+  const visibleTabs = TAB_LIST.filter(
+    (t) => !t.roles || t.roles.includes(user?.role)
+  );
 
   // 재고 현황 요약 데이터
   const [summary, setSummary] = useState(null);
@@ -204,7 +215,7 @@ const InventoryPage = () => {
         {/* 탭 네비게이션 */}
         <div className="border-b border-slate-100 px-6 pt-4">
           <div className="flex gap-1">
-            {TAB_LIST.map(({ id, label, icon: Icon }) => (
+            {visibleTabs.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
@@ -243,6 +254,10 @@ const InventoryPage = () => {
           {/* 월말재고 스냅샷 탭 */}
           {activeTab === "snapshot-end" && (
             <InventorySnapshot snapshotType="month_end" />
+          )}
+          {/* 거래처 관리 탭 — admin/manager 전용 (운영관리에서 이동) */}
+          {activeTab === "vendors" && (
+            <VendorTab readOnly={false} />
           )}
         </div>
       </div>
