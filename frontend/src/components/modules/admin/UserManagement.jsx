@@ -6,6 +6,7 @@
 import { useState, useEffect } from "react";
 import { UserPlus, Edit2, UserX, Shield, Briefcase, User } from "lucide-react";
 import { getUsers, createUser, updateUser, deleteUser } from "../../../api/authApi";
+import { fetchEmployees } from "../../../api/employeeApi";
 import { useToast } from "../../../contexts/ToastContext";
 
 // 역할 배지 색상 및 레이블 매핑
@@ -40,19 +41,44 @@ const RoleBadge = ({ role }) => {
  */
 const UserModal = ({ isOpen, editUser, onClose, onSave }) => {
   // 폼 상태
-  const [form, setForm] = useState({ username: "", password: "", name: "", role: "staff" });
+  const [form, setForm] = useState({ username: "", password: "", name: "", role: "staff", employee_id: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  // 직원 목록 (직원 연결 드롭다운용)
+  const [employeeList, setEmployeeList] = useState([]);
 
-  // 수정 모드일 때 기존 데이터로 폼 초기화
+  // 모달 열릴 때 폼 초기화 + 직원 목록 조회
   useEffect(() => {
+    if (!isOpen) return;
+
+    // 직원 목록은 항상 로드 (생성/수정 모두 필요)
+    fetchEmployees(false).then(setEmployeeList).catch(() => setEmployeeList([]));
+
     if (editUser) {
-      setForm({ username: editUser.username, password: "", name: editUser.name, role: editUser.role });
+      setForm({
+        username: editUser.username,
+        password: "",
+        name: editUser.name,
+        role: editUser.role,
+        employee_id: editUser.employee_id ? String(editUser.employee_id) : "",
+      });
     } else {
-      setForm({ username: "", password: "", name: "", role: "staff" });
+      setForm({ username: "", password: "", name: "", role: "staff", employee_id: "" });
     }
     setErrorMessage("");
   }, [editUser, isOpen]);
+
+  /**
+   * 직원 선택 시 이름 자동 채우기 (신규 생성 모드에서만)
+   */
+  const handleEmployeeSelect = (employeeId) => {
+    const newForm = { ...form, employee_id: employeeId };
+    if (!editUser && employeeId) {
+      const emp = employeeList.find((e) => String(e.id) === employeeId);
+      if (emp) newForm.name = emp.name;
+    }
+    setForm(newForm);
+  };
 
   if (!isOpen) return null;
 
@@ -74,10 +100,20 @@ const UserModal = ({ isOpen, editUser, onClose, onSave }) => {
         // 수정 — 비밀번호는 입력한 경우에만 전송
         const updateData = { name: form.name, role: form.role };
         if (form.password.trim()) updateData.password = form.password;
+        // 직원 연결: 선택 없음이면 0(연결 해제), 숫자면 해당 직원 연결
+        if (form.employee_id === "" || form.employee_id === "0") {
+          updateData.employee_id = 0;
+        } else {
+          updateData.employee_id = Number(form.employee_id);
+        }
         await updateUser(editUser.id, updateData);
       } else {
         // 신규 생성
-        await createUser({ username: form.username, password: form.password, name: form.name, role: form.role });
+        const newUser = await createUser({ username: form.username, password: form.password, name: form.name, role: form.role });
+        // 직원 연결이 선택된 경우 생성 직후 바로 연결
+        if (form.employee_id && newUser?.id) {
+          await updateUser(newUser.id, { employee_id: Number(form.employee_id) });
+        }
       }
       onSave();
       onClose();
@@ -101,6 +137,30 @@ const UserModal = ({ isOpen, editUser, onClose, onSave }) => {
 
         {/* 모달 본문 */}
         <form id="user-form" onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {/* 직원 선택 — 등록된 직원을 먼저 선택하면 이름이 자동 입력됩니다 */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              직원 연결 <span className="text-slate-400 font-normal">(출퇴근 버튼용)</span>
+            </label>
+            <select
+              value={form.employee_id}
+              onChange={(e) => handleEmployeeSelect(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value="">연결 없음</option>
+              {employeeList.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} ({emp.position || emp.employment_type || "-"})
+                </option>
+              ))}
+            </select>
+            {!editUser && (
+              <p className="text-xs text-slate-400 mt-1">
+                직원을 선택하면 이름이 자동으로 입력됩니다.
+              </p>
+            )}
+          </div>
+
           {/* 아이디 — 신규 생성 시에만 입력 */}
           {!editUser && (
             <div>
@@ -300,6 +360,7 @@ const UserManagement = () => {
                 <th className="px-4 py-3 text-left font-medium text-slate-600">아이디</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">이름</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">역할</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-600">직원연결</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">마지막 로그인</th>
                 <th className="px-4 py-3 text-left font-medium text-slate-600">상태</th>
                 <th className="px-4 py-3 text-center font-medium text-slate-600">관리</th>
@@ -317,6 +378,17 @@ const UserManagement = () => {
                   {/* 역할 배지 */}
                   <td className="px-4 py-3">
                     <RoleBadge role={user.role} />
+                  </td>
+
+                  {/* 직원 연결 상태 */}
+                  <td className="px-4 py-3">
+                    {user.employee_id ? (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        연결됨 #{user.employee_id}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">미연결</span>
+                    )}
                   </td>
 
                   {/* 마지막 로그인 */}

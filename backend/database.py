@@ -67,3 +67,39 @@ def create_tables():
     import models.document     # noqa: F401
     import models.auth         # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+
+def add_missing_columns():
+    """
+    기존 DB 스키마에 누락된 컬럼을 추가합니다 (알터 마이그레이션).
+    create_all은 기존 테이블 컬럼을 추가하지 않으므로 별도로 처리합니다.
+    이미 존재하는 컬럼에 대한 오류는 무시합니다.
+    """
+    from sqlalchemy import text
+
+    migrations = []
+
+    if DATABASE_URL.startswith("sqlite"):
+        # SQLite: IF NOT EXISTS 미지원 — 오류 캐치로 처리
+        migrations = [
+            "ALTER TABLE users ADD COLUMN employee_id INTEGER",
+        ]
+        with engine.connect() as conn:
+            for sql in migrations:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    pass  # 컬럼이 이미 존재하면 무시
+    else:
+        # PostgreSQL: ADD COLUMN IF NOT EXISTS 지원
+        migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id INTEGER",
+        ]
+        with engine.connect() as conn:
+            for sql in migrations:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception:
+                    pass

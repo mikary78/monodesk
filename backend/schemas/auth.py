@@ -33,6 +33,7 @@ class UserBrief(BaseModel):
     username: str
     name: str
     role: str
+    employee_id: Optional[int] = None  # 연결된 직원 ID
 
 
 # ─────────────────────────────────────────
@@ -60,8 +61,9 @@ class UserUpdate(BaseModel):
     """계정 수정 요청 — admin 전용"""
     name: Optional[str] = None
     role: Optional[str] = None
-    password: Optional[str] = None   # 비밀번호 변경 시에만 포함
+    password: Optional[str] = None       # 비밀번호 변경 시에만 포함
     is_active: Optional[bool] = None
+    employee_id: Optional[int] = None    # 연결 직원 ID (0이면 연결 해제)
 
     @field_validator("role")
     @classmethod
@@ -84,6 +86,7 @@ class UserResponse(BaseModel):
     name: str
     role: str
     is_active: bool
+    employee_id: Optional[int] = None
     last_login: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime

@@ -62,6 +62,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             username=user.username,
             name=user.name,
             role=user.role,
+            employee_id=user.employee_id,
         ),
     )
 
@@ -159,6 +160,9 @@ def update_user(
         user.password_hash = get_password_hash(data.password)
     if data.is_active is not None:
         user.is_active = data.is_active
+    if data.employee_id is not None:
+        # 0이면 연결 해제, 양수이면 해당 직원 연결
+        user.employee_id = None if data.employee_id == 0 else data.employee_id
 
     user.updated_at = datetime.utcnow()
     db.commit()

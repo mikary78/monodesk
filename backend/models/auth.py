@@ -27,6 +27,10 @@ class User(Base):
     role = Column(String, nullable=False, default="staff")   # admin / manager / staff
     is_active = Column(Boolean, default=True)                # 계정 활성화 여부
 
+    # 직원 연결 — 출퇴근 버튼 및 본인 기록 조회에 사용
+    # FK 제약 없이 employees.id를 참조 (SQLite 이관 편의상)
+    employee_id = Column(Integer, nullable=True)
+
     # 타임스탬프
     last_login = Column(DateTime, nullable=True)             # 마지막 로그인 시각
     created_at = Column(DateTime, default=func.now())

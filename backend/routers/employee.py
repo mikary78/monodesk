@@ -263,6 +263,82 @@ def get_weekly_attendance_calendar(
         raise HTTPException(status_code=500, detail=f"주별 근태 데이터 조회 중 오류가 발생했습니다: {str(e)}")
 
 
+@router.get("/attendance/my", response_model=List[AttendanceRecordResponse])
+def get_my_attendance(
+    year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
+    month: int = Query(..., ge=1, le=12, description="조회 월"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "manager", "staff")),
+):
+    """
+    현재 로그인한 사용자 본인의 출퇴근 기록 조회.
+    users.employee_id로 연결된 직원의 기록만 반환합니다.
+    staff 역할은 이 엔드포인트로만 출퇴근 기록에 접근합니다.
+    """
+    if not current_user.employee_id:
+        raise HTTPException(
+            status_code=400,
+            detail="직원 정보가 연결되지 않았습니다. 관리자에게 문의하세요.",
+        )
+    return service.get_attendance_list(db, year, month, current_user.employee_id)
+
+
+@router.get("/attendance/today-status")
+def get_today_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "manager", "staff")),
+):
+    """
+    오늘 날짜 출퇴근 상태 조회 (헤더 출퇴근 버튼용).
+    직원 미연결 시 linked=False를 반환합니다.
+    """
+    if not current_user.employee_id:
+        return {
+            "linked": False,
+            "clocked_in": False,
+            "clocked_out": False,
+            "clock_in": None,
+            "clock_out": None,
+            "record_id": None,
+        }
+    status = service.get_today_attendance_status(db, current_user.employee_id)
+    return {"linked": True, **status}
+
+
+@router.post("/attendance/clock-in")
+def clock_in(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "manager", "staff")),
+):
+    """
+    출근 처리 — 현재 시각으로 오늘 날짜 출근 기록을 생성합니다.
+    직원 미연결 시 400 오류를 반환합니다.
+    """
+    if not current_user.employee_id:
+        raise HTTPException(status_code=400, detail="직원 정보가 연결되지 않았습니다. 관리자에게 문의하세요.")
+    try:
+        return service.clock_in(db, current_user.employee_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/attendance/clock-out")
+def clock_out(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "manager", "staff")),
+):
+    """
+    퇴근 처리 — 현재 시각으로 오늘 날짜 퇴근 기록을 업데이트합니다.
+    출근 기록 없으면 400 오류를 반환합니다.
+    """
+    if not current_user.employee_id:
+        raise HTTPException(status_code=400, detail="직원 정보가 연결되지 않았습니다. 관리자에게 문의하세요.")
+    try:
+        return service.clock_out(db, current_user.employee_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.patch("/attendance/bulk")
 def bulk_update_attendance(
     records: List[Any] = Body(..., description="근태 일괄 업데이트 목록"),

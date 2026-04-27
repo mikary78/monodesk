@@ -429,6 +429,119 @@ def get_weekly_calendar(db: Session, date_str: str) -> dict:
     }
 
 
+def get_today_attendance_status(db: Session, employee_id: int) -> dict:
+    """
+    오늘 날짜의 출퇴근 상태 조회.
+    헤더 출퇴근 버튼의 현재 상태 표시에 사용합니다.
+    """
+    from datetime import datetime as dt
+    today = dt.now().strftime("%Y-%m-%d")
+
+    record = db.query(AttendanceRecord).filter(
+        AttendanceRecord.employee_id == employee_id,
+        AttendanceRecord.work_date == today,
+        AttendanceRecord.is_deleted == 0
+    ).first()
+
+    if not record:
+        return {
+            "clocked_in": False,
+            "clocked_out": False,
+            "clock_in": None,
+            "clock_out": None,
+            "record_id": None,
+        }
+
+    return {
+        "clocked_in": bool(record.clock_in),
+        "clocked_out": bool(record.clock_out),
+        "clock_in": record.clock_in,
+        "clock_out": record.clock_out,
+        "record_id": record.id,
+    }
+
+
+def clock_in(db: Session, employee_id: int) -> dict:
+    """
+    출근 처리 — 현재 시각을 clock_in으로 기록합니다.
+    오늘 기록이 없으면 생성하고, 있으면 clock_in을 추가합니다.
+    """
+    from datetime import datetime as dt
+    now = dt.now()
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+
+    existing = db.query(AttendanceRecord).filter(
+        AttendanceRecord.employee_id == employee_id,
+        AttendanceRecord.work_date == today,
+        AttendanceRecord.is_deleted == 0
+    ).first()
+
+    if existing:
+        if existing.clock_in:
+            raise ValueError(f"이미 출근 처리되었습니다. ({existing.clock_in})")
+        existing.clock_in = current_time
+        existing.daily_status = "work"
+        existing.updated_at = dt.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return {"success": True, "clock_in": current_time, "record_id": existing.id}
+    else:
+        record = AttendanceRecord(
+            employee_id=employee_id,
+            work_date=today,
+            clock_in=current_time,
+            daily_status="work",
+        )
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        return {"success": True, "clock_in": current_time, "record_id": record.id}
+
+
+def clock_out(db: Session, employee_id: int) -> dict:
+    """
+    퇴근 처리 — 현재 시각을 clock_out으로 기록하고 근무시간을 자동 계산합니다.
+    오늘 출근 기록이 없으면 오류를 반환합니다.
+    """
+    from datetime import datetime as dt
+    now = dt.now()
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+
+    existing = db.query(AttendanceRecord).filter(
+        AttendanceRecord.employee_id == employee_id,
+        AttendanceRecord.work_date == today,
+        AttendanceRecord.is_deleted == 0
+    ).first()
+
+    if not existing or not existing.clock_in:
+        raise ValueError("출근 기록이 없습니다. 먼저 출근 처리를 해주세요.")
+
+    if existing.clock_out:
+        raise ValueError(f"이미 퇴근 처리되었습니다. ({existing.clock_out})")
+
+    existing.clock_out = current_time
+
+    # 근무시간 자동 계산
+    hours_info = calculate_work_hours(existing.clock_in, current_time)
+    existing.work_hours = hours_info["work_hours"]
+    existing.overtime_hours = hours_info["overtime_hours"]
+    existing.night_hours = hours_info["night_hours"]
+
+    existing.updated_at = dt.utcnow()
+    db.commit()
+    db.refresh(existing)
+
+    return {
+        "success": True,
+        "clock_in": existing.clock_in,
+        "clock_out": current_time,
+        "work_hours": existing.work_hours,
+        "record_id": existing.id,
+    }
+
+
 def bulk_update_attendance(
     db: Session,
     records: list

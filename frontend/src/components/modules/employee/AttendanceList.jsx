@@ -6,20 +6,23 @@
 import { useState, useEffect } from "react";
 import { Plus, Edit, Trash2, Clock, ChevronDown, ClipboardList } from "lucide-react";
 import {
-  fetchAttendance, fetchEmployees, createAttendance,
+  fetchAttendance, fetchMyAttendance, fetchEmployees, createAttendance,
   updateAttendance, deleteAttendance, formatHours
 } from "../../../api/employeeApi";
 import AttendanceFormModal from "./AttendanceFormModal";
+import { useAuth } from "../../../contexts/AuthContext";
 
 /**
  * 출퇴근 기록 관리 컴포넌트
  * @param {number} year - 조회 연도
  * @param {number} month - 조회 월
+ * @param {boolean} staffOnly - true면 본인 기록만 조회 (staff 역할)
  */
-const AttendanceList = ({ year, month }) => {
+const AttendanceList = ({ year, month, staffOnly = false }) => {
+  const { user } = useAuth();
   // 출퇴근 기록 상태
   const [records, setRecords] = useState([]);
-  // 직원 목록 (필터용)
+  // 직원 목록 (필터용 — staffOnly 모드에서는 사용하지 않음)
   const [employees, setEmployees] = useState([]);
   // 선택된 직원 필터
   const [selectedEmployee, setSelectedEmployee] = useState("");
@@ -35,21 +38,30 @@ const AttendanceList = ({ year, month }) => {
   // 연도/월 변경 시 데이터 다시 불러오기
   useEffect(() => {
     loadData();
-  }, [year, month, selectedEmployee]);
+  }, [year, month, selectedEmployee]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * 출퇴근 기록 + 직원 목록 로드
+   * 출퇴근 기록 + 직원 목록 로드.
+   * staffOnly 모드에서는 본인 기록만 조회합니다.
    */
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [attendanceData, employeeData] = await Promise.all([
-        fetchAttendance(year, month, selectedEmployee || null),
-        fetchEmployees(false),
-      ]);
-      setRecords(attendanceData);
-      setEmployees(employeeData);
+
+      if (staffOnly) {
+        // staff 본인 기록 전용 조회
+        const attendanceData = await fetchMyAttendance(year, month);
+        setRecords(attendanceData);
+        setEmployees([]);
+      } else {
+        const [attendanceData, employeeData] = await Promise.all([
+          fetchAttendance(year, month, selectedEmployee || null),
+          fetchEmployees(false),
+        ]);
+        setRecords(attendanceData);
+        setEmployees(employeeData);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -74,11 +86,13 @@ const AttendanceList = ({ year, month }) => {
   };
 
   /**
-   * 직원명 찾기 (employee_id → 이름)
+   * 직원명 찾기 (employee_id → 이름).
+   * staffOnly 모드에서는 로그인 사용자 이름을 반환합니다.
    * @param {number} employeeId - 직원 ID
    * @returns {string} 직원 이름
    */
   const getEmployeeName = (employeeId) => {
+    if (staffOnly) return user?.name || "나";
     const emp = employees.find((e) => e.id === employeeId);
     return emp ? emp.name : `직원 #${employeeId}`;
   };
@@ -141,20 +155,22 @@ const AttendanceList = ({ year, month }) => {
       {/* 상단 필터 + 집계 + 등록 버튼 */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          {/* 직원 필터 */}
-          <div className="relative">
-            <select
-              value={selectedEmployee}
-              onChange={(e) => setSelectedEmployee(e.target.value)}
-              className="h-9 pl-3 pr-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none"
-            >
-              <option value="">전체 직원</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>{emp.name}</option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          </div>
+          {/* 직원 필터 — staffOnly 모드에서는 숨김 */}
+          {!staffOnly && (
+            <div className="relative">
+              <select
+                value={selectedEmployee}
+                onChange={(e) => setSelectedEmployee(e.target.value)}
+                className="h-9 pl-3 pr-8 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white appearance-none"
+              >
+                <option value="">전체 직원</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+          )}
 
           {/* 집계 정보 */}
           {records.length > 0 && (
@@ -170,15 +186,17 @@ const AttendanceList = ({ year, month }) => {
           )}
         </div>
 
-        {/* 출퇴근 기록 입력 버튼 */}
-        <button
-          onClick={() => { setEditingRecord(null); setShowModal(true); }}
-          className="flex items-center gap-2 h-9 px-4 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 transition-colors"
-          title="출퇴근 기록 입력"
-        >
-          <Plus size={16} />
-          출퇴근 입력
-        </button>
+        {/* 출퇴근 기록 입력 버튼 — staffOnly 모드에서는 숨김 */}
+        {!staffOnly && (
+          <button
+            onClick={() => { setEditingRecord(null); setShowModal(true); }}
+            className="flex items-center gap-2 h-9 px-4 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 transition-colors"
+            title="출퇴근 기록 입력"
+          >
+            <Plus size={16} />
+            출퇴근 입력
+          </button>
+        )}
       </div>
 
       {/* 에러 메시지 */}
@@ -207,7 +225,9 @@ const AttendanceList = ({ year, month }) => {
                 <th className="text-center text-xs font-semibold text-slate-500 uppercase px-4 py-3 w-28">근무시간</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase px-4 py-3">수당</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase px-4 py-3">메모</th>
-                <th className="text-right text-xs font-semibold text-slate-500 uppercase px-4 py-3 w-20">관리</th>
+                {!staffOnly && (
+                  <th className="text-right text-xs font-semibold text-slate-500 uppercase px-4 py-3 w-20">관리</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -256,25 +276,27 @@ const AttendanceList = ({ year, month }) => {
                     <td className="px-4 py-3 text-sm text-slate-500 max-w-[150px] truncate">
                       {record.memo || ""}
                     </td>
-                    {/* 관리 버튼 */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => { setEditingRecord(record); setShowModal(true); }}
-                          className="h-7 w-7 flex items-center justify-center border border-slate-200 rounded hover:bg-slate-50 transition-colors"
-                          title="수정"
-                        >
-                          <Edit size={13} className="text-slate-500" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(record)}
-                          className="h-7 w-7 flex items-center justify-center border border-red-200 rounded hover:bg-red-50 transition-colors"
-                          title="삭제"
-                        >
-                          <Trash2 size={13} className="text-red-400" />
-                        </button>
-                      </div>
-                    </td>
+                    {/* 관리 버튼 — staffOnly 모드에서는 숨김 */}
+                    {!staffOnly && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => { setEditingRecord(record); setShowModal(true); }}
+                            className="h-7 w-7 flex items-center justify-center border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                            title="수정"
+                          >
+                            <Edit size={13} className="text-slate-500" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(record)}
+                            className="h-7 w-7 flex items-center justify-center border border-red-200 rounded hover:bg-red-50 transition-colors"
+                            title="삭제"
+                          >
+                            <Trash2 size={13} className="text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

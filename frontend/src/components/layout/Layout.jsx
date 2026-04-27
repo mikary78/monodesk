@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Menu, LogOut } from "lucide-react";
 import Sidebar from "./Sidebar";
+import ClockWidget from "./ClockWidget";
 import { useAuth } from "../../contexts/AuthContext";
 
 /**
@@ -48,14 +49,17 @@ const Layout = () => {
         {/* 앱 이름 */}
         <span className="text-white font-bold text-lg tracking-tight">MonoDesk</span>
 
-        {/* 로그아웃 버튼 */}
-        <button
-          onClick={logout}
-          className="p-2 text-slate-400 hover:text-white transition-colors"
-          aria-label="로그아웃"
-        >
-          <LogOut size={20} />
-        </button>
+        {/* 출퇴근 버튼 + 로그아웃 버튼 */}
+        <div className="flex items-center gap-2">
+          <ClockWidget compact={true} />
+          <button
+            onClick={logout}
+            className="p-2 text-slate-400 hover:text-white transition-colors"
+            aria-label="로그아웃"
+          >
+            <LogOut size={20} />
+          </button>
+        </div>
       </header>
 
       {/* ── 사이드바 ────────────────────────────────────────────

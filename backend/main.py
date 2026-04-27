@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from database import create_tables, SessionLocal
+from database import create_tables, add_missing_columns, SessionLocal
 from routers import (
     accounting, sales_analysis, inventory, menu, employee,
     dashboard, corporate, operations, ocr, document,
@@ -105,7 +105,9 @@ async def lifespan(app: FastAPI):
     """앱 시작/종료 라이프스팬 이벤트"""
     # 1. SQLAlchemy 모델 기반 테이블 생성 (없는 테이블만, 기존 데이터 보존)
     create_tables()
-    # 2. 기초 데이터 삽입 (admin 계정, 카테고리 등 — 이미 있으면 건너뜀)
+    # 2. 기존 테이블에 누락 컬럼 추가 (알터 마이그레이션)
+    add_missing_columns()
+    # 3. 기초 데이터 삽입 (admin 계정, 카테고리 등 — 이미 있으면 건너뜀)
     seed_initial_data()
     print("MonoDesk 서버가 시작되었습니다.")
     yield

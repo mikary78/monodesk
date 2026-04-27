@@ -35,15 +35,15 @@ const EmployeePage = () => {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
-  // 현재 활성 탭 — staff/manager면 calendar/employees, 그 외는 employees
-  const [activeTab, setActiveTab] = useState(isStaff ? "calendar" : "employees");
+  // 현재 활성 탭 — staff는 attendance(본인 기록), 그 외는 employees
+  const [activeTab, setActiveTab] = useState(isStaff ? "attendance" : "employees");
 
   // 표시할 탭 목록
-  // - staff: 근무표 달력만
+  // - staff: 출퇴근 기록(본인만) + 근무표 달력
   // - manager: 급여 정산 탭 제외 (직원 목록/출퇴근/근무표 달력 표시)
   // - admin: 전체 4개 탭
   const visibleTabs = isStaff
-    ? TABS.filter((t) => t.id === "calendar")
+    ? TABS.filter((t) => t.id === "attendance" || t.id === "calendar")
     : isManager
     ? TABS.filter((t) => t.id !== "salary")
     : TABS;
@@ -137,9 +137,9 @@ const EmployeePage = () => {
         {/* 직원 목록 탭 */}
         {activeTab === "employees" && <EmployeeList />}
 
-        {/* 출퇴근 관리 탭 */}
+        {/* 출퇴근 관리 탭 — staff는 본인 기록만, 나머지는 전체 */}
         {activeTab === "attendance" && (
-          <AttendanceList year={year} month={month} />
+          <AttendanceList year={year} month={month} staffOnly={isStaff} />
         )}
 
         {/* 급여 정산 탭 */}

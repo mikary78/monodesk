@@ -15,6 +15,7 @@ import {
   Settings, LogOut, UserCog,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
+import ClockWidget from "./ClockWidget";
 
 // ─────────────────────────────────────────
 // 메뉴 목록 — 역할별 권한 키 연결
@@ -152,6 +153,9 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             <p className="text-slate-400 text-xs">{roleLabel}</p>
           </div>
         )}
+
+        {/* 출퇴근 버튼 (직원 연결 시에만 표시) */}
+        <ClockWidget compact={false} />
 
         {/* 메뉴 목록 — 역할 기반 필터링 */}
         <nav className="flex-1 py-4 overflow-y-auto">

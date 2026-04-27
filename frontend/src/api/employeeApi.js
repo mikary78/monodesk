@@ -289,6 +289,41 @@ export async function bulkUpdateAttendance(records) {
   });
 }
 
+/**
+ * 현재 로그인 사용자 본인의 월별 출퇴근 기록 조회 (staff 전용).
+ * 엔드포인트: GET /attendance/my?year=&month=
+ * @param {number} year - 연도
+ * @param {number} month - 월
+ */
+export async function fetchMyAttendance(year, month) {
+  const params = new URLSearchParams({ year, month });
+  return request(`${BASE_URL}/attendance/my?${params}`);
+}
+
+/**
+ * 오늘 날짜 출퇴근 상태 조회 (헤더 출퇴근 버튼용).
+ * 엔드포인트: GET /attendance/today-status
+ */
+export async function fetchTodayAttendanceStatus() {
+  return request(`${BASE_URL}/attendance/today-status`);
+}
+
+/**
+ * 출근 처리 — 현재 시각으로 오늘 날짜 출근 기록을 생성합니다.
+ * 엔드포인트: POST /attendance/clock-in
+ */
+export async function clockIn() {
+  return request(`${BASE_URL}/attendance/clock-in`, { method: "POST" });
+}
+
+/**
+ * 퇴근 처리 — 현재 시각으로 오늘 날짜 퇴근 기록을 업데이트합니다.
+ * 엔드포인트: POST /attendance/clock-out
+ */
+export async function clockOut() {
+  return request(`${BASE_URL}/attendance/clock-out`, { method: "POST" });
+}
+
 // ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
