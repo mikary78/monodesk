@@ -39,7 +39,7 @@ class EmployeeBase(BaseModel):
     # 계약형태: 4대보험 / 3.3% / 시급알바 / 일급
     contract_type: Optional[str] = "4대보험"
     # 일급 (원/일, 일급제일 때 사용)
-    daily_wage: int = 0
+    daily_wage: Optional[int] = 0
     memo: Optional[str] = None
 
     @field_validator("employment_type")
