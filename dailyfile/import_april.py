@@ -82,9 +82,11 @@ for row in ws.iter_rows(min_row=4, values_only=True):
         continue
 
     card_net       = safe_float(row[4])   # 카드순매출 (catchtable 차감 완료)
-    cash_col       = safe_float(row[6])   # 현금 (이체 포함)
+    cash_col       = safe_float(row[6])   # 현금 (이체+캐치페이 포함)
     transfer_amt   = safe_float(row[15])  # 계좌이체 금액
-    cash_pure      = cash_col - transfer_amt  # 순수 현금
+    catchtable_amt = safe_float(row[17])  # 캐치페이 금액
+    # 순수 현금: 현금col6 - 이체 - 캐치페이 (캐치페이 이중계산 방지)
+    cash_pure      = max(cash_col - transfer_amt - catchtable_amt, 0.0)
 
     cur.execute('''
         INSERT INTO sales_records (
@@ -115,7 +117,7 @@ for row in ws.iter_rows(min_row=4, values_only=True):
         safe_int(row[14]),       # transfer_count
         transfer_amt,
         safe_int(row[16]),       # catchtable_count
-        safe_float(row[17]),     # catchtable_amount
+        catchtable_amt,          # catchtable_amount
         safe_int(row[26]),       # card_cancel_count
         safe_float(row[27]),     # card_cancel_amount
         safe_str(row[28]),       # card_cancel_reason
@@ -124,7 +126,7 @@ for row in ws.iter_rows(min_row=4, values_only=True):
         safe_str(row[29]),       # special_note
     ))
     inserted['sales'] += 1
-    print(f'  {day:02d}일: 총매출 {total:,}원 삽입 (카드 {int(card_net):,} / 현금 {int(cash_pure):,} / 캐치 {int(safe_float(row[17])):,})')
+    print(f'  {day:02d}일: 총매출 {total:,}원 삽입 (카드 {int(card_net):,} / 현금 {int(cash_pure):,} / 이체 {int(transfer_amt):,} / 캐치 {int(catchtable_amt):,})')
 
 conn.commit()
 print(f'[OK] 매출: {inserted["sales"]}건 삽입, {skipped["sales"]}건 스킵\n')

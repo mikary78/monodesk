@@ -283,6 +283,131 @@ def parse_csv_file(
     )
 
 
+def parse_xlsx_file(
+    db: Session,
+    file_bytes: bytes,
+    file_name: str
+) -> PosImportResult:
+    """
+    POS Excel(.xlsx) 파일을 파싱하여 pos_sales_raw 테이블에 저장합니다.
+    포스 엑셀 형식: 4~5행 이중 헤더, 6행부터 데이터 (날짜 역순)
+    col1=날짜, col4=총거래금액, col19=현금, col21=순카드
+
+    중복 파일은 해시로 감지합니다.
+    """
+    import openpyxl
+
+    # 파일 해시 계산 및 중복 체크
+    file_hash = calculate_file_hash(file_bytes)
+    existing = db.query(PosImport).filter(PosImport.file_hash == file_hash).first()
+    if existing:
+        return PosImportResult(
+            success=False,
+            message=f"이미 가져온 파일입니다. (이전 가져오기: {existing.created_at.strftime('%Y-%m-%d %H:%M')})",
+            import_id=existing.id,
+            row_count=existing.row_count,
+            duplicate=True,
+        )
+
+    # Excel 파싱
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        ws = wb.active
+    except Exception as e:
+        return PosImportResult(
+            success=False,
+            message=f"Excel 파일을 열 수 없습니다: {str(e)}",
+            row_count=0,
+        )
+
+    # 가져오기 이력 레코드 생성
+    pos_import = PosImport(
+        file_name=file_name,
+        file_hash=file_hash,
+        status="processing",
+    )
+    db.add(pos_import)
+    db.flush()
+
+    rows_saved = 0
+    errors = []
+    dates_seen: list[date] = []
+
+    # 6행부터 데이터 (1~5행은 헤더)
+    for row_num in range(6, ws.max_row + 1):
+        raw_date = ws.cell(row_num, 1).value
+        if raw_date is None:
+            continue
+
+        # 날짜 파싱
+        try:
+            if isinstance(raw_date, datetime):
+                sale_date = raw_date.date()
+            elif isinstance(raw_date, date):
+                sale_date = raw_date
+            elif isinstance(raw_date, str) and len(raw_date) == 10:
+                sale_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+            else:
+                continue
+        except (ValueError, TypeError):
+            continue
+
+        # 금액 파싱
+        def _safe(v) -> float:
+            if v is None: return 0.0
+            try: return float(v)
+            except: return 0.0
+
+        total_price = _safe(ws.cell(row_num, 4).value)   # 총거래금액
+        card_amount = _safe(ws.cell(row_num, 21).value)  # 순카드
+        cash_amount = _safe(ws.cell(row_num, 19).value)  # 현금
+
+        if total_price <= 0:
+            continue
+
+        # 일별 합계를 pos_sales_raw에 '일별 합계' 메뉴명으로 저장
+        raw_rec = PosSalesRaw(
+            import_id=pos_import.id,
+            sale_date=sale_date,
+            menu_name="[POS 일별합계]",
+            quantity=1,
+            unit_price=total_price,
+            total_price=total_price,
+            payment_method="카드",
+            raw_data=f"card={card_amount},cash={cash_amount}",
+        )
+        db.add(raw_rec)
+        rows_saved += 1
+        dates_seen.append(sale_date)
+
+    date_from = min(dates_seen) if dates_seen else None
+    date_to   = max(dates_seen) if dates_seen else None
+
+    pos_import.row_count      = rows_saved
+    pos_import.status         = "success" if rows_saved > 0 else "failed"
+    pos_import.date_from      = date_from
+    pos_import.date_to        = date_to
+
+    db.commit()
+
+    if rows_saved == 0:
+        return PosImportResult(
+            success=False,
+            message="유효한 데이터를 찾을 수 없습니다. Excel 파일 내용을 확인해주세요.",
+            import_id=pos_import.id,
+            row_count=0,
+        )
+
+    return PosImportResult(
+        success=True,
+        message=f"{rows_saved:,}일치 POS 데이터를 성공적으로 가져왔습니다.",
+        import_id=pos_import.id,
+        row_count=rows_saved,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
 def get_import_history(db: Session, limit: int = 20) -> List[PosImport]:
     """가져오기 이력 목록 조회 (최신순)"""
     return db.query(PosImport).order_by(PosImport.created_at.desc()).limit(limit).all()

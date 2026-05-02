@@ -136,6 +136,10 @@ class SalesRecord(Base):
     sales_etc = Column(Float, default=0, comment="기타 매출 (원)")
     # 특이사항 메모
     special_note = Column(Text, nullable=True, comment="특이사항")
+    # POS 집계 데이터 (포스기 엑셀에서 import한 값)
+    pos_total = Column(Float, default=0, comment="POS 총거래금액 (원)")
+    pos_card = Column(Float, default=0, comment="POS 카드금액 (원)")
+    pos_cash = Column(Float, default=0, comment="POS 현금금액 (원)")
     # POS 연동 여부 (True: POS 자동 연동, False: 수동 입력)
     is_pos_synced = Column(Integer, default=0, comment="POS 연동 여부 (0: 수동, 1: 자동)")
     # 소프트 삭제

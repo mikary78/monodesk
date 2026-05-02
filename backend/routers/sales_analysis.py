@@ -33,12 +33,12 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 
 @router.post("/import", response_model=PosImportResult)
 async def import_pos_csv(
-    file: UploadFile = File(..., description="POS CSV 파일"),
+    file: UploadFile = File(..., description="POS CSV 또는 Excel 파일"),
     db: Session = Depends(get_db),
 ):
     """
-    POS CSV 파일을 업로드하고 데이터를 파싱하여 저장합니다.
-    - 지원 형식: CSV (UTF-8, CP949)
+    POS 파일을 업로드하고 데이터를 파싱하여 저장합니다.
+    - 지원 형식: CSV (UTF-8, CP949), Excel (.xlsx)
     - 최대 파일 크기: 10MB
     - 중복 파일 자동 감지
     """
@@ -47,10 +47,10 @@ async def import_pos_csv(
         raise HTTPException(status_code=400, detail="파일명이 없습니다.")
 
     file_ext = file.filename.rsplit(".", 1)[-1].lower()
-    if file_ext not in ["csv", "txt"]:
+    if file_ext not in ["csv", "txt", "xlsx"]:
         raise HTTPException(
             status_code=400,
-            detail="CSV 파일만 업로드 가능합니다. (.csv, .txt)"
+            detail="CSV 또는 Excel 파일만 업로드 가능합니다. (.csv, .txt, .xlsx)"
         )
 
     # 파일 내용 읽기
@@ -67,7 +67,11 @@ async def import_pos_csv(
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
 
     try:
-        result = service.parse_csv_file(db, file_bytes, file.filename)
+        # xlsx 파일은 Excel 파싱 경로, 나머지는 CSV 파싱 경로
+        if file_ext == "xlsx":
+            result = service.parse_xlsx_file(db, file_bytes, file.filename)
+        else:
+            result = service.parse_csv_file(db, file_bytes, file.filename)
         return result
     except Exception as e:
         raise HTTPException(

@@ -204,6 +204,10 @@ class SalesRecordResponse(SalesRecordBase):
     id: int
     total_sales: float
     is_pos_synced: bool
+    # POS 집계 데이터 (포스기 엑셀에서 import한 값)
+    pos_total: Optional[float] = Field(0, description="POS 총거래금액 (원)")
+    pos_card: Optional[float] = Field(0, description="POS 카드금액 (원)")
+    pos_cash: Optional[float] = Field(0, description="POS 현금금액 (원)")
     created_at: datetime
     updated_at: datetime
 

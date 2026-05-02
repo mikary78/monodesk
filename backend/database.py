@@ -85,6 +85,10 @@ def add_missing_columns():
             "ALTER TABLE users ADD COLUMN employee_id INTEGER",
             "ALTER TABLE sales_records ADD COLUMN catchtable_count INTEGER DEFAULT 0",
             "ALTER TABLE sales_records ADD COLUMN catchtable_amount FLOAT DEFAULT 0",
+            # POS 데이터 컬럼 추가
+            "ALTER TABLE sales_records ADD COLUMN pos_total FLOAT DEFAULT 0",
+            "ALTER TABLE sales_records ADD COLUMN pos_card FLOAT DEFAULT 0",
+            "ALTER TABLE sales_records ADD COLUMN pos_cash FLOAT DEFAULT 0",
         ]
         with engine.connect() as conn:
             for sql in migrations:
@@ -99,6 +103,10 @@ def add_missing_columns():
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id INTEGER",
             "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS catchtable_count INTEGER DEFAULT 0",
             "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS catchtable_amount FLOAT DEFAULT 0",
+            # POS 데이터 컬럼 추가
+            "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS pos_total FLOAT DEFAULT 0",
+            "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS pos_card FLOAT DEFAULT 0",
+            "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS pos_cash FLOAT DEFAULT 0",
         ]
         with engine.connect() as conn:
             for sql in migrations:
