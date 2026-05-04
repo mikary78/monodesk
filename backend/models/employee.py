@@ -120,6 +120,7 @@ class Employee(Base):
     # 관계 정의
     attendance_records = relationship("AttendanceRecord", back_populates="employee")
     salary_records = relationship("SalaryRecord", back_populates="employee")
+    leave_records = relationship("LeaveRecord", back_populates="employee")
 
     def __repr__(self):
         return f"<Employee(id={self.id}, name={self.name}, type={self.employment_type})>"
@@ -247,6 +248,9 @@ class SalaryRecord(Base):
     # 지급일 (YYYY-MM-DD)
     paid_date = Column(String(10), nullable=True, comment="지급일")
 
+    # 기타 추가 수당 (월급제/시급제 모두 자유 입력 가능)
+    extra_allowance = Column(Float, default=0, comment="기타 추가 수당 (원, 자유 입력)")
+
     # 메모
     memo = Column(Text, nullable=True, comment="메모")
 
@@ -261,3 +265,46 @@ class SalaryRecord(Base):
 
     def __repr__(self):
         return f"<SalaryRecord(id={self.id}, employee_id={self.employee_id}, year={self.year}, month={self.month})>"
+
+
+class LeaveRecord(Base):
+    """
+    휴가 기록 테이블.
+    직원별 휴가 신청/기록을 저장합니다.
+    AttendanceRecord의 daily_status와 연동됩니다.
+    """
+    __tablename__ = "leave_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # 직원 ID (외래키)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, comment="직원 ID")
+
+    # 휴가 날짜 (YYYY-MM-DD)
+    leave_date = Column(String(10), nullable=False, index=True, comment="휴가 날짜 (YYYY-MM-DD)")
+
+    # 휴가 유형
+    # annual: 연차, half_am: 반차(오전), half_pm: 반차(오후)
+    # substitute: 대체휴가, petition: 청원휴가, special: 특별휴가, day_off: 일반휴무
+    leave_type = Column(String(20), nullable=False, comment="휴가 유형")
+
+    # 휴가 사유
+    leave_reason = Column(Text, nullable=True, comment="휴가 사유")
+
+    # 승인자 이름
+    approved_by = Column(String(50), nullable=True, comment="승인자 이름")
+
+    # 승인 여부 (1: 승인, 0: 미승인)
+    is_approved = Column(Integer, default=1, comment="승인 여부 (1: 승인, 0: 미승인)")
+
+    # 소프트 삭제
+    is_deleted = Column(Integer, default=0, comment="소프트 삭제 (0: 정상, 1: 삭제)")
+
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="수정일시")
+
+    # 관계 정의
+    employee = relationship("Employee", back_populates="leave_records")
+
+    def __repr__(self):
+        return f"<LeaveRecord(id={self.id}, employee_id={self.employee_id}, date={self.leave_date}, type={self.leave_type})>"

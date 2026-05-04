@@ -89,6 +89,8 @@ def add_missing_columns():
             "ALTER TABLE sales_records ADD COLUMN pos_total FLOAT DEFAULT 0",
             "ALTER TABLE sales_records ADD COLUMN pos_card FLOAT DEFAULT 0",
             "ALTER TABLE sales_records ADD COLUMN pos_cash FLOAT DEFAULT 0",
+            # 급여 정산: 기타 추가 수당 컬럼 추가
+            "ALTER TABLE salary_records ADD COLUMN extra_allowance FLOAT DEFAULT 0",
         ]
         with engine.connect() as conn:
             for sql in migrations:
@@ -107,6 +109,8 @@ def add_missing_columns():
             "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS pos_total FLOAT DEFAULT 0",
             "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS pos_card FLOAT DEFAULT 0",
             "ALTER TABLE sales_records ADD COLUMN IF NOT EXISTS pos_cash FLOAT DEFAULT 0",
+            # 급여 정산: 기타 추가 수당 컬럼 추가
+            "ALTER TABLE salary_records ADD COLUMN IF NOT EXISTS extra_allowance FLOAT DEFAULT 0",
         ]
         with engine.connect() as conn:
             for sql in migrations:

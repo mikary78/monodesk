@@ -29,6 +29,8 @@ const SalaryPanel = ({ year, month }) => {
   const [overview, setOverview] = useState(null);
   // 급여 계산 결과 (직원 ID → 계산 결과)
   const [calculations, setCalculations] = useState({});
+  // 기타 추가 수당 입력 (직원 ID → 금액)
+  const [extraAllowances, setExtraAllowances] = useState({});
   // 로딩 상태 (직원별)
   const [loadingMap, setLoadingMap] = useState({});
   // 전체 로딩
@@ -66,8 +68,9 @@ const SalaryPanel = ({ year, month }) => {
       ]);
       setEmployees(empData);
       setOverview(overviewData);
-      // 탭 변경 시 계산 결과 초기화
+      // 탭 변경 시 계산 결과 및 추가수당 초기화
       setCalculations({});
+      setExtraAllowances({});
       setExpandedEmployee(null);
     } catch (err) {
       setError(err.message);
@@ -77,13 +80,15 @@ const SalaryPanel = ({ year, month }) => {
   };
 
   /**
-   * 특정 직원의 급여 계산
+   * 특정 직원의 급여 계산 (extra_allowance 포함)
    * @param {number} employeeId - 직원 ID
    */
   const handleCalculate = async (employeeId) => {
     try {
       setLoadingMap((prev) => ({ ...prev, [employeeId]: true }));
-      const result = await calculateSalary(employeeId, year, month);
+      // 입력된 기타 추가 수당 금액 (없으면 0)
+      const extra = Number(extraAllowances[employeeId] || 0);
+      const result = await calculateSalary(employeeId, year, month, extra);
       setCalculations((prev) => ({ ...prev, [employeeId]: result }));
       // 계산 후 자동으로 상세 펼치기
       setExpandedEmployee(employeeId);
@@ -109,7 +114,9 @@ const SalaryPanel = ({ year, month }) => {
     setSaveConfirm({ open: false, employeeId: null, employeeName: "" });
     try {
       setLoadingMap((prev) => ({ ...prev, [employeeId]: true }));
-      await saveSalary(employeeId, year, month);
+      // 기타 추가 수당 포함하여 저장
+      const extra = Number(extraAllowances[employeeId] || 0);
+      await saveSalary(employeeId, year, month, extra);
       await loadData();
       toast.success(`${employeeName}의 ${month}월 급여가 저장되었습니다.`);
     } catch (err) {
@@ -278,6 +285,27 @@ const SalaryPanel = ({ year, month }) => {
 
                   {/* 버튼 영역 */}
                   <div className="flex items-center gap-2">
+                    {/* 기타 추가 수당 입력란 (모든 직원에게 표시) */}
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-slate-500 whitespace-nowrap">추가수당</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={extraAllowances[emp.id] ?? ""}
+                        onChange={(e) =>
+                          setExtraAllowances((prev) => ({
+                            ...prev,
+                            [emp.id]: e.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                        className="w-28 h-8 px-2 text-sm text-right border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        title="기타 추가 수당 (원) — 급여 계산 전에 입력하세요"
+                      />
+                      <span className="text-xs text-slate-400">원</span>
+                    </div>
+
                     {/* 저장된 급여 요약 */}
                     {savedRecord && (
                       <div className="text-right mr-2">
@@ -410,6 +438,12 @@ const SalaryPanel = ({ year, month }) => {
                             <div className="flex justify-between">
                               <span className="text-purple-500">야간근로수당</span>
                               <span className="font-medium text-purple-600">{formatCurrency(calc.night_pay)}</span>
+                            </div>
+                          )}
+                          {calc.extra_allowance > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-teal-600">기타 추가 수당</span>
+                              <span className="font-medium text-teal-700">{formatCurrency(calc.extra_allowance)}</span>
                             </div>
                           )}
                           <div className="flex justify-between border-t border-slate-200 pt-2">

@@ -18,7 +18,8 @@ from schemas.employee import (
     AttendanceRecordCreate, AttendanceRecordUpdate, AttendanceRecordResponse,
     SalaryRecordUpdate, SalaryRecordResponse,
     SalaryCalculationRequest, SalaryCalculationResult,
-    MonthlySalarySummary
+    MonthlySalarySummary,
+    LeaveRecordCreate, LeaveRecordUpdate, LeaveRecordResponse
 )
 import services.employee_service as service
 from auth import require_role
@@ -457,9 +458,13 @@ def calculate_salary(
     """
     직원의 월 급여를 계산합니다 (저장 없이 미리보기).
     출퇴근 기록 기반으로 기본급, 수당, 공제액, 실수령액을 계산합니다.
+    extra_allowance를 요청 바디에 포함하면 기타 추가 수당이 반영됩니다.
     """
     try:
-        return service.calculate_salary(db, data.employee_id, data.year, data.month)
+        return service.calculate_salary(
+            db, data.employee_id, data.year, data.month,
+            extra_allowance=data.extra_allowance
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -475,9 +480,13 @@ def save_salary(
     """
     계산된 급여를 DB에 저장합니다.
     이미 해당 월 정산 기록이 있으면 업데이트합니다.
+    extra_allowance를 요청 바디에 포함하면 기타 추가 수당이 반영됩니다.
     """
     try:
-        calc_result = service.calculate_salary(db, data.employee_id, data.year, data.month)
+        calc_result = service.calculate_salary(
+            db, data.employee_id, data.year, data.month,
+            extra_allowance=data.extra_allowance
+        )
         return service.save_salary_record(db, calc_result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -526,3 +535,75 @@ def update_salary_record(
     if not result:
         raise HTTPException(status_code=404, detail="해당 급여 정산 기록을 찾을 수 없습니다.")
     return result
+
+
+# ─────────────────────────────────────────
+# 휴가 관리 API
+# 주의: 고정 경로를 동적 경로보다 앞에 등록합니다.
+# ─────────────────────────────────────────
+
+@router.get("/leave", response_model=List[LeaveRecordResponse])
+def get_leave_records(
+    employee_id: Optional[int] = Query(None, description="직원 ID 필터"),
+    year: Optional[int] = Query(None, ge=2020, le=2099, description="조회 연도"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="조회 월"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """
+    휴가 기록 목록 조회.
+    employee_id, year, month로 필터링 가능합니다.
+    """
+    return service.get_leave_records(db, employee_id, year, month)
+
+
+@router.post("/leave", response_model=LeaveRecordResponse, status_code=201)
+def create_leave_record(
+    data: LeaveRecordCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """
+    휴가 기록 등록.
+    등록 시 해당 날짜의 출퇴근 기록 daily_status를 자동 반영합니다.
+    """
+    # 직원 존재 여부 확인
+    employee = service.get_employee_by_id(db, data.employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="해당 직원을 찾을 수 없습니다.")
+    try:
+        return service.create_leave_record(db, data, sync_attendance=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"휴가 등록 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.put("/leave/{leave_id}", response_model=LeaveRecordResponse)
+def update_leave_record(
+    leave_id: int,
+    data: LeaveRecordUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """휴가 기록 수정. 휴가 유형 변경 시 출퇴근 상태도 자동 업데이트됩니다."""
+    result = service.update_leave_record(db, leave_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 휴가 기록을 찾을 수 없습니다.")
+    return result
+
+
+@router.delete("/leave/{leave_id}")
+def delete_leave_record(
+    leave_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """
+    휴가 기록 삭제 (소프트 삭제).
+    삭제 시 다른 휴가가 없으면 출퇴근 상태를 'work'로 되돌립니다.
+    """
+    success = service.delete_leave_record(db, leave_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 휴가 기록을 찾을 수 없습니다.")
+    return {"success": True, "message": "휴가 기록이 삭제되었습니다."}

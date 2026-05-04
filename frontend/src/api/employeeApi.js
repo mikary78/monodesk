@@ -185,11 +185,17 @@ export async function fetchSalaryOverview(year, month) {
  * @param {number} employeeId - 직원 ID
  * @param {number} year - 연도
  * @param {number} month - 월
+ * @param {number} extraAllowance - 기타 추가 수당 (기본값 0)
  */
-export async function calculateSalary(employeeId, year, month) {
+export async function calculateSalary(employeeId, year, month, extraAllowance = 0) {
   return request(`${BASE_URL}/salary/calculate`, {
     method: "POST",
-    body: JSON.stringify({ employee_id: employeeId, year, month }),
+    body: JSON.stringify({
+      employee_id: employeeId,
+      year,
+      month,
+      extra_allowance: extraAllowance,
+    }),
   });
 }
 
@@ -198,11 +204,17 @@ export async function calculateSalary(employeeId, year, month) {
  * @param {number} employeeId - 직원 ID
  * @param {number} year - 연도
  * @param {number} month - 월
+ * @param {number} extraAllowance - 기타 추가 수당 (기본값 0)
  */
-export async function saveSalary(employeeId, year, month) {
+export async function saveSalary(employeeId, year, month, extraAllowance = 0) {
   return request(`${BASE_URL}/salary/save`, {
     method: "POST",
-    body: JSON.stringify({ employee_id: employeeId, year, month }),
+    body: JSON.stringify({
+      employee_id: employeeId,
+      year,
+      month,
+      extra_allowance: extraAllowance,
+    }),
   });
 }
 
@@ -391,5 +403,72 @@ export function formatDate(dateStr) {
  */
 export function formatContractType(type) {
   const map = { "4대보험": "정규직", "3.3%": "계약직", "시급알바": "알바", "일급": "일급" };
+  return map[type] || type;
+}
+
+// ─────────────────────────────────────────
+// 휴가 관리 API
+// ─────────────────────────────────────────
+
+/**
+ * 휴가 기록 목록 조회
+ * @param {object} params - 필터 파라미터 { employeeId, year, month }
+ */
+export async function fetchLeaveRecords({ employeeId = null, year = null, month = null } = {}) {
+  const params = new URLSearchParams();
+  if (employeeId) params.append("employee_id", employeeId);
+  if (year) params.append("year", year);
+  if (month) params.append("month", month);
+  return request(`${BASE_URL}/leave?${params}`);
+}
+
+/**
+ * 휴가 기록 등록
+ * @param {object} data - 휴가 데이터 { employee_id, leave_date, leave_type, leave_reason, approved_by }
+ */
+export async function createLeaveRecord(data) {
+  return request(`${BASE_URL}/leave`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 휴가 기록 수정
+ * @param {number} leaveId - 휴가 기록 ID
+ * @param {object} data - 수정할 데이터
+ */
+export async function updateLeaveRecord(leaveId, data) {
+  return request(`${BASE_URL}/leave/${leaveId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * 휴가 기록 삭제
+ * @param {number} leaveId - 휴가 기록 ID
+ */
+export async function deleteLeaveRecord(leaveId) {
+  return request(`${BASE_URL}/leave/${leaveId}`, {
+    method: "DELETE",
+  });
+}
+
+/**
+ * 휴가 유형 코드를 한국어로 변환합니다.
+ * @param {string} type - 휴가 유형 코드
+ * @returns {string} 한국어 레이블
+ */
+export function formatLeaveType(type) {
+  const map = {
+    annual: "연차",
+    half_am: "반차(오전)",
+    half_pm: "반차(오후)",
+    substitute: "대체휴가",
+    petition: "청원휴가",
+    special: "특별휴가",
+    day_off: "일반휴무",
+  };
   return map[type] || type;
 }

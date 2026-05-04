@@ -75,10 +75,10 @@ for row in ws.iter_rows(min_row=4, values_only=True):
         continue
 
     card_net       = safe_float(row[4])
-    cash_col       = safe_float(row[6])   # 현금 (이체+캐치페이 포함)
+    cash_col       = safe_float(row[6])   # 현금(캐치페이+이체 포함)
     transfer_amt   = safe_float(row[15])  # 계좌이체 금액
     catchtable_amt = safe_float(row[17])  # 캐치페이 금액
-    # 순수 현금: 현금col6 - 이체 - 캐치페이 (캐치페이 이중계산 방지)
+    # 순수 현금: col6에서 이체·캐치페이 제외 (이중계산 방지)
     cash_pure      = max(cash_col - transfer_amt - catchtable_amt, 0.0)
 
     cur.execute('''

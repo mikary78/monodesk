@@ -13,17 +13,18 @@ import { createAttendance, updateAttendance, calculateWorkHours, formatHours } f
  * @param {Array} employees - 직원 목록
  * @param {number} year - 현재 선택된 연도
  * @param {number} month - 현재 선택된 월
+ * @param {string|null} defaultDate - 신규 등록 시 기본 날짜 (CalendarAttendanceTab에서 클릭한 날짜)
  * @param {function} onClose - 닫기 콜백
  * @param {function} onSaved - 저장 완료 콜백
  */
-const AttendanceFormModal = ({ record, employees, year, month, onClose, onSaved }) => {
+const AttendanceFormModal = ({ record, employees, year, month, defaultDate, onClose, onSaved }) => {
   // 오늘 날짜 (기본값용)
   const today = new Date().toISOString().split("T")[0];
 
-  // 폼 데이터 상태
+  // 폼 데이터 상태 — defaultDate가 있으면 해당 날짜를 초기값으로 사용
   const [form, setForm] = useState({
     employee_id: "",
-    work_date: today,
+    work_date: defaultDate || today,
     clock_in: "",
     clock_out: "",
     work_hours: "",

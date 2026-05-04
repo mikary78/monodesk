@@ -197,6 +197,8 @@ class SalaryRecordBase(BaseModel):
     weekly_holiday_pay: float = 0
     overtime_pay: float = 0
     night_pay: float = 0
+    # 기타 추가 수당 (월급제/시급제 모두 자유 입력)
+    extra_allowance: float = 0
     gross_pay: float = 0
     deduction_pension: float = 0
     deduction_health: float = 0
@@ -236,13 +238,6 @@ class SalaryRecordResponse(SalaryRecordBase):
 # 급여 계산 요청/결과 스키마
 # ─────────────────────────────────────────
 
-class SalaryCalculationRequest(BaseModel):
-    """급여 계산 요청 스키마"""
-    employee_id: int
-    year: int
-    month: int
-
-
 class SalaryCalculationResult(BaseModel):
     """급여 계산 결과 스키마 (저장 전 미리보기용)"""
     employee_id: int
@@ -260,6 +255,8 @@ class SalaryCalculationResult(BaseModel):
     weekly_holiday_pay: float
     overtime_pay: float
     night_pay: float
+    # 기타 추가 수당 (자유 입력)
+    extra_allowance: float = 0
     gross_pay: float
     # 4대보험 공제 항목
     deduction_pension: float
@@ -285,5 +282,84 @@ class MonthlySalarySummary(BaseModel):
     paid_count: int               # 지급 완료 직원 수
     unpaid_count: int             # 미지급 직원 수
     salary_details: List[dict]    # 직원별 상세 내역
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─────────────────────────────────────────
+# 급여 계산 요청 (extra_allowance 포함)
+# ─────────────────────────────────────────
+
+class SalaryCalculationRequest(BaseModel):
+    """급여 계산 요청 스키마 (extra_allowance 포함)"""
+    employee_id: int
+    year: int
+    month: int
+    # 기타 추가 수당 (계산 시 직접 입력, 기본값 0)
+    extra_allowance: float = 0
+
+
+# ─────────────────────────────────────────
+# 휴가 기록 스키마
+# ─────────────────────────────────────────
+
+class LeaveRecordBase(BaseModel):
+    """휴가 기록 공통 필드"""
+    employee_id: int
+    # 휴가 날짜 (YYYY-MM-DD)
+    leave_date: str
+    # 휴가 유형: annual/half_am/half_pm/substitute/petition/special/day_off
+    leave_type: str
+    leave_reason: Optional[str] = None
+    approved_by: Optional[str] = None
+    is_approved: int = 1
+
+    @field_validator("leave_date")
+    @classmethod
+    def validate_leave_date(cls, v: str) -> str:
+        """날짜 형식 유효성 검사 (YYYY-MM-DD)"""
+        import re
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+            raise ValueError("날짜 형식은 YYYY-MM-DD이어야 합니다.")
+        return v
+
+    @field_validator("leave_type")
+    @classmethod
+    def validate_leave_type(cls, v: str) -> str:
+        """휴가 유형 유효성 검사"""
+        allowed = {
+            "annual",      # 연차
+            "half_am",     # 반차(오전)
+            "half_pm",     # 반차(오후)
+            "substitute",  # 대체휴가
+            "petition",    # 청원휴가
+            "special",     # 특별휴가
+            "day_off",     # 일반휴무
+        }
+        if v not in allowed:
+            raise ValueError(f"유효하지 않은 휴가 유형입니다: {v}")
+        return v
+
+
+class LeaveRecordCreate(LeaveRecordBase):
+    """휴가 기록 생성 요청 스키마"""
+    pass
+
+
+class LeaveRecordUpdate(BaseModel):
+    """휴가 기록 수정 요청 스키마 (부분 수정 허용)"""
+    leave_type: Optional[str] = None
+    leave_reason: Optional[str] = None
+    approved_by: Optional[str] = None
+    is_approved: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LeaveRecordResponse(LeaveRecordBase):
+    """휴가 기록 응답 스키마"""
+    id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from typing import List, Optional, Dict, Any
 from datetime import date, timedelta
-from models.employee import Employee, AttendanceRecord, SalaryRecord
+from models.employee import Employee, AttendanceRecord, SalaryRecord, LeaveRecord
 from schemas.employee import (
     EmployeeCreate, EmployeeUpdate,
     AttendanceRecordCreate, AttendanceRecordUpdate,
     SalaryRecordUpdate,
-    SalaryCalculationResult, MonthlySalarySummary
+    SalaryCalculationResult, MonthlySalarySummary,
+    LeaveRecordCreate, LeaveRecordUpdate
 )
 import math
 
@@ -763,7 +764,8 @@ def calculate_salary(
     db: Session,
     employee_id: int,
     year: int,
-    month: int
+    month: int,
+    extra_allowance: float = 0.0
 ) -> SalaryCalculationResult:
     """
     직원의 월 급여를 계산합니다.
@@ -814,7 +816,7 @@ def calculate_salary(
             attendance_list, hourly_wage, year, month
         )
 
-        gross_pay = base_pay + overtime_pay + night_pay + weekly_holiday_pay
+        gross_pay = base_pay + overtime_pay + night_pay + weekly_holiday_pay + extra_allowance
 
         # 최저임금 충족 여부 확인 (최저임금법 제6조)
         # 비교 기준: 기본급만 / 실제 근무시간 (주휴·연장·야간수당은 제외)
@@ -841,7 +843,7 @@ def calculate_salary(
         # 월급제는 소정근로 이행 시 주휴 포함, 별도 주휴수당 없음
         weekly_holiday_pay = 0.0
 
-        gross_pay = base_pay + overtime_pay + night_pay
+        gross_pay = base_pay + overtime_pay + night_pay + extra_allowance
 
         # 최저임금 확인: 월급 ÷ 209시간 >= 최저시급 (기본급 기준)
         effective_hourly = hourly_wage_monthly
@@ -899,6 +901,7 @@ def calculate_salary(
         weekly_holiday_pay=weekly_holiday_pay,
         overtime_pay=overtime_pay,
         night_pay=night_pay,
+        extra_allowance=extra_allowance,
         gross_pay=gross_pay,
         deduction_pension=deductions["deduction_pension"],
         deduction_health=deductions["deduction_health"],
@@ -939,6 +942,7 @@ def save_salary_record(
         "weekly_holiday_pay": calc_result.weekly_holiday_pay,
         "overtime_pay": calc_result.overtime_pay,
         "night_pay": calc_result.night_pay,
+        "extra_allowance": calc_result.extra_allowance,
         "gross_pay": calc_result.gross_pay,
         "deduction_pension": calc_result.deduction_pension,
         "deduction_health": calc_result.deduction_health,
@@ -1088,3 +1092,190 @@ def get_salary_history(
         })
 
     return history
+
+
+# ─────────────────────────────────────────
+# 휴가 관리 서비스
+# ─────────────────────────────────────────
+
+# 휴가 유형 → AttendanceRecord daily_status 매핑
+LEAVE_TYPE_TO_STATUS = {
+    "annual": "annual",        # 연차 → annual
+    "half_am": "half_am",      # 반차(오전) → half_am
+    "half_pm": "half_pm",      # 반차(오후) → half_pm
+    "substitute": "annual",    # 대체휴가 → annual로 통합 처리
+    "petition": "annual",      # 청원휴가 → annual로 통합 처리
+    "special": "annual",       # 특별휴가 → annual로 통합 처리
+    "day_off": "off",          # 일반휴무 → off
+}
+
+# 휴가 유형 한국어 레이블
+LEAVE_TYPE_LABELS = {
+    "annual": "연차",
+    "half_am": "반차(오전)",
+    "half_pm": "반차(오후)",
+    "substitute": "대체휴가",
+    "petition": "청원휴가",
+    "special": "특별휴가",
+    "day_off": "일반휴무",
+}
+
+
+def get_leave_records(
+    db: Session,
+    employee_id: Optional[int] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None
+) -> List[LeaveRecord]:
+    """
+    휴가 기록 목록 조회.
+    employee_id, year, month로 필터링 가능합니다.
+    """
+    query = db.query(LeaveRecord).filter(LeaveRecord.is_deleted == 0)
+
+    if employee_id:
+        query = query.filter(LeaveRecord.employee_id == employee_id)
+
+    if year and month:
+        # YYYY-MM 패턴으로 해당 월 필터
+        year_month = f"{year:04d}-{month:02d}"
+        query = query.filter(LeaveRecord.leave_date.like(f"{year_month}-%"))
+    elif year:
+        query = query.filter(LeaveRecord.leave_date.like(f"{year:04d}-%"))
+
+    return query.order_by(LeaveRecord.leave_date.desc()).all()
+
+
+def get_leave_record_by_id(db: Session, leave_id: int) -> Optional[LeaveRecord]:
+    """ID로 휴가 기록 단건 조회"""
+    return db.query(LeaveRecord).filter(
+        LeaveRecord.id == leave_id,
+        LeaveRecord.is_deleted == 0
+    ).first()
+
+
+def create_leave_record(
+    db: Session,
+    data: LeaveRecordCreate,
+    sync_attendance: bool = True
+) -> LeaveRecord:
+    """
+    휴가 기록 생성.
+    sync_attendance=True이면 해당 날짜의 AttendanceRecord daily_status를 자동 반영합니다.
+    기존 출퇴근 기록이 없으면 새로 생성합니다.
+    """
+    from datetime import datetime as dt
+
+    # 중복 체크: 동일 직원, 동일 날짜, 동일 휴가 유형은 1개만 허용
+    existing = db.query(LeaveRecord).filter(
+        LeaveRecord.employee_id == data.employee_id,
+        LeaveRecord.leave_date == data.leave_date,
+        LeaveRecord.leave_type == data.leave_type,
+        LeaveRecord.is_deleted == 0
+    ).first()
+    if existing:
+        raise ValueError(
+            f"해당 날짜({data.leave_date})에 동일한 휴가({LEAVE_TYPE_LABELS.get(data.leave_type, data.leave_type)})가 이미 등록되어 있습니다."
+        )
+
+    record = LeaveRecord(**data.model_dump())
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    # AttendanceRecord daily_status 자동 반영
+    if sync_attendance:
+        status = LEAVE_TYPE_TO_STATUS.get(data.leave_type, "off")
+        _sync_attendance_status(db, data.employee_id, data.leave_date, status)
+
+    return record
+
+
+def update_leave_record(
+    db: Session,
+    leave_id: int,
+    data: LeaveRecordUpdate
+) -> Optional[LeaveRecord]:
+    """
+    휴가 기록 수정.
+    휴가 유형이 변경되면 AttendanceRecord daily_status도 업데이트합니다.
+    """
+    record = get_leave_record_by_id(db, leave_id)
+    if not record:
+        return None
+
+    old_type = record.leave_type
+    update_data = data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(record, key, value)
+
+    db.commit()
+    db.refresh(record)
+
+    # 휴가 유형이 변경된 경우 AttendanceRecord 동기화
+    if "leave_type" in update_data and update_data["leave_type"] != old_type:
+        status = LEAVE_TYPE_TO_STATUS.get(record.leave_type, "off")
+        _sync_attendance_status(db, record.employee_id, record.leave_date, status)
+
+    return record
+
+
+def delete_leave_record(db: Session, leave_id: int) -> bool:
+    """
+    휴가 기록 소프트 삭제.
+    삭제 시 AttendanceRecord daily_status를 'work'로 되돌립니다.
+    단, 해당 날짜에 다른 휴가 기록이 남아 있으면 되돌리지 않습니다.
+    """
+    record = get_leave_record_by_id(db, leave_id)
+    if not record:
+        return False
+
+    record.is_deleted = 1
+    from datetime import datetime as dt
+    record.updated_at = dt.utcnow()
+    db.commit()
+
+    # 해당 날짜에 남은 휴가 기록이 있는지 확인
+    remaining = db.query(LeaveRecord).filter(
+        LeaveRecord.employee_id == record.employee_id,
+        LeaveRecord.leave_date == record.leave_date,
+        LeaveRecord.is_deleted == 0
+    ).count()
+
+    # 남은 휴가가 없으면 출퇴근 상태를 'work'로 복구
+    if remaining == 0:
+        _sync_attendance_status(db, record.employee_id, record.leave_date, "work")
+
+    return True
+
+
+def _sync_attendance_status(
+    db: Session,
+    employee_id: int,
+    work_date: str,
+    status: str
+) -> None:
+    """
+    AttendanceRecord의 daily_status를 해당 날짜로 동기화합니다.
+    기록이 없으면 새로 생성하고, 있으면 status만 업데이트합니다.
+    """
+    from datetime import datetime as dt
+
+    existing = db.query(AttendanceRecord).filter(
+        AttendanceRecord.employee_id == employee_id,
+        AttendanceRecord.work_date == work_date,
+        AttendanceRecord.is_deleted == 0
+    ).first()
+
+    if existing:
+        existing.daily_status = status
+        existing.updated_at = dt.utcnow()
+    else:
+        new_record = AttendanceRecord(
+            employee_id=employee_id,
+            work_date=work_date,
+            daily_status=status,
+        )
+        db.add(new_record)
+
+    db.commit()

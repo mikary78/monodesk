@@ -1,18 +1,22 @@
 // ============================================================
 // EmployeePage.jsx — 직원 관리 메인 페이지
-// 4개 탭: 직원 목록 / 출퇴근 관리 / 급여 정산 / 근무표 달력
-// staff 역할: 근무표 달력 탭만 표시 (초기 탭도 calendar)
-// manager 역할: 급여 정산 탭 제외, 나머지 3개 탭 표시 (초기 탭 employees)
-// admin: 4개 탭 모두 표시
+// 6개 탭: 직원 목록 / 출퇴근 관리(캘린더) / 급여 정산 / 근무표 달력 / 휴가 관리
+// staff 역할: 출퇴근 기록(본인) + 근무표 달력 탭만 표시
+// manager 역할: 급여 정산 탭 제외, 나머지 표시
+// admin: 전체 탭 표시
 // ============================================================
 
 import { useState } from "react";
-import { Users, ChevronLeft, ChevronRight, UserCheck, Clock, DollarSign, Calendar } from "lucide-react";
+import {
+  Users, ChevronLeft, ChevronRight, UserCheck, Clock,
+  DollarSign, Calendar, CalendarDays,
+} from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import EmployeeList from "../components/modules/employee/EmployeeList";
-import AttendanceList from "../components/modules/employee/AttendanceList";
+import CalendarAttendanceTab from "../components/modules/employee/CalendarAttendanceTab";
 import SalaryPanel from "../components/modules/employee/SalaryPanel";
 import AttendanceCalendar from "../components/modules/employee/AttendanceCalendar";
+import LeaveTab from "../components/modules/employee/LeaveTab";
 
 // 탭 메뉴 정의
 const TABS = [
@@ -20,6 +24,7 @@ const TABS = [
   { id: "attendance", label: "출퇴근 관리", Icon: Clock },
   { id: "salary",     label: "급여 정산",   Icon: DollarSign },
   { id: "calendar",   label: "근무표 달력", Icon: Calendar },
+  { id: "leave",      label: "휴가 관리",   Icon: CalendarDays },
 ];
 
 const EmployeePage = () => {
@@ -39,9 +44,9 @@ const EmployeePage = () => {
   const [activeTab, setActiveTab] = useState(isStaff ? "attendance" : "employees");
 
   // 표시할 탭 목록
-  // - staff: 출퇴근 기록(본인만) + 근무표 달력
-  // - manager: 급여 정산 탭 제외 (직원 목록/출퇴근/근무표 달력 표시)
-  // - admin: 전체 4개 탭
+  // - staff: 출퇴근 기록(본인) + 근무표 달력
+  // - manager: 급여 정산 탭 제외 (직원 목록/출퇴근/근무표 달력/휴가관리)
+  // - admin: 전체 5개 탭
   const visibleTabs = isStaff
     ? TABS.filter((t) => t.id === "attendance" || t.id === "calendar")
     : isManager
@@ -137,9 +142,9 @@ const EmployeePage = () => {
         {/* 직원 목록 탭 */}
         {activeTab === "employees" && <EmployeeList />}
 
-        {/* 출퇴근 관리 탭 — staff는 본인 기록만, 나머지는 전체 */}
+        {/* 출퇴근 관리 탭 — 캘린더 뷰 (staff는 본인 기록만) */}
         {activeTab === "attendance" && (
-          <AttendanceList year={year} month={month} staffOnly={isStaff} />
+          <CalendarAttendanceTab year={year} month={month} staffOnly={isStaff} />
         )}
 
         {/* 급여 정산 탭 */}
@@ -150,6 +155,11 @@ const EmployeePage = () => {
         {/* 근무표 달력 탭 — staff는 읽기 전용 */}
         {activeTab === "calendar" && (
           <AttendanceCalendar year={year} month={month} readOnly={isStaff} />
+        )}
+
+        {/* 휴가 관리 탭 */}
+        {activeTab === "leave" && (
+          <LeaveTab year={year} month={month} />
         )}
       </div>
     </div>
