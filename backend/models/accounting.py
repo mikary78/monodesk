@@ -166,3 +166,42 @@ class SalesRecord(Base):
 
     def __repr__(self):
         return f"<SalesRecord(id={self.id}, date={self.sales_date}, total={self.total_sales})>"
+
+
+class ProductSalesMonthly(Base):
+    """
+    상품별 월간 판매 현황 테이블.
+    POS 엑셀(상품별매출_YYYYMM.xlsx)에서 가져온 데이터를 저장합니다.
+    같은 연/월/상품코드 조합은 UNIQUE 제약으로 중복 방지 후 upsert 처리합니다.
+    """
+    __tablename__ = "product_sales_monthly"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 집계 연도 (예: 2026)
+    year = Column(Integer, nullable=False, index=True, comment="집계 연도")
+    # 집계 월 (예: 4)
+    month = Column(Integer, nullable=False, index=True, comment="집계 월")
+    # 상품 코드 (POS 고유 코드, 없을 수 있음)
+    product_code = Column(String(100), nullable=True, comment="상품 코드")
+    # 상품명 (필수)
+    product_name = Column(String(200), nullable=False, comment="상품명")
+    # 상품 분류 (메뉴/주류/기타 등 POS 분류)
+    category = Column(String(100), nullable=True, comment="상품 분류")
+    # 과세 구분 (과세/면세/영세)
+    tax_type = Column(String(50), nullable=True, comment="과세 구분")
+    # 상품 상태 (정상/중지 등)
+    status = Column(String(50), nullable=True, comment="상품 상태")
+    # 총 판매 수량 (해당 월 합계, 가장 신뢰도 높은 컬럼)
+    quantity = Column(Integer, default=0, comment="총 판매 수량")
+    # 상품 원가 (POS에 단가 미등록 시 0)
+    unit_cost = Column(Float, default=0, comment="상품 원가 (단가)")
+    # 총 판매 금액 (POS에 단가 미등록 시 0)
+    total_sales = Column(Float, default=0, comment="총 판매 금액 (원)")
+    # 판매 수량 비율 (전체 대비 %)
+    quantity_ratio = Column(Float, default=0, comment="판매 수량 비율 (%)")
+    # 판매 금액 비율 (전체 대비 %)
+    sales_ratio = Column(Float, default=0, comment="판매 금액 비율 (%)")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+
+    def __repr__(self):
+        return f"<ProductSalesMonthly(id={self.id}, year={self.year}, month={self.month}, name={self.product_name}, qty={self.quantity})>"

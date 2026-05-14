@@ -99,6 +99,34 @@ def add_missing_columns():
                     conn.commit()
                 except Exception:
                     pass  # 컬럼이 이미 존재하면 무시
+
+        # 상품별 월간 판매 테이블 신규 생성 (SQLite)
+        # create_tables()의 create_all이 처리하지만, 기존 DB에는 없을 수 있으므로 명시적 생성
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS product_sales_monthly (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        year INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        product_code TEXT,
+                        product_name TEXT NOT NULL,
+                        category TEXT,
+                        tax_type TEXT,
+                        status TEXT,
+                        quantity INTEGER DEFAULT 0,
+                        unit_cost FLOAT DEFAULT 0,
+                        total_sales FLOAT DEFAULT 0,
+                        quantity_ratio FLOAT DEFAULT 0,
+                        sales_ratio FLOAT DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(year, month, product_code)
+                    )
+                """))
+                conn.commit()
+            except Exception:
+                pass  # 이미 존재하면 무시
+
     else:
         # PostgreSQL: ADD COLUMN IF NOT EXISTS 지원
         migrations = [
@@ -119,3 +147,30 @@ def add_missing_columns():
                     conn.commit()
                 except Exception:
                     pass
+
+        # 상품별 월간 판매 테이블 신규 생성 (PostgreSQL)
+        # UNIQUE 제약: (year, month, product_code) — 동일 상품 upsert 시 충돌 처리
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS product_sales_monthly (
+                        id SERIAL PRIMARY KEY,
+                        year INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        product_code TEXT,
+                        product_name TEXT NOT NULL,
+                        category TEXT,
+                        tax_type TEXT,
+                        status TEXT,
+                        quantity INTEGER DEFAULT 0,
+                        unit_cost FLOAT DEFAULT 0,
+                        total_sales FLOAT DEFAULT 0,
+                        quantity_ratio FLOAT DEFAULT 0,
+                        sales_ratio FLOAT DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(year, month, product_code)
+                    )
+                """))
+                conn.commit()
+            except Exception:
+                pass  # 이미 존재하면 무시

@@ -240,3 +240,55 @@ class AiInsightResponse(BaseModel):
     anomalies: List[str] = []      # 이상 감지 항목
     recommendations: List[str] = []  # 추천 액션
     generated_at: str              # 생성 일시
+
+
+# ─────────────────────────────────────────
+# 상품별 월간 판매 스키마
+# ─────────────────────────────────────────
+
+class ProductSalesItem(BaseModel):
+    """
+    상품별 판매 데이터 응답 아이템.
+    POS 엑셀에서 파싱한 상품별 판매 현황을 나타냅니다.
+    """
+    id: int
+    year: int
+    month: int
+    product_code: Optional[str] = None    # 상품 코드 (POS 고유 번호)
+    product_name: str                      # 상품명 (필수)
+    category: Optional[str] = None        # 상품 분류 (메뉴/주류 등)
+    tax_type: Optional[str] = None        # 과세 구분
+    status: Optional[str] = None          # 상품 상태
+    quantity: int = 0                      # 총 판매 수량 (이 달 합계)
+    unit_cost: float = 0                   # 상품 원가
+    total_sales: float = 0                 # 총 판매 금액
+    quantity_ratio: float = 0              # 수량 비율 (%)
+    sales_ratio: float = 0                 # 금액 비율 (%)
+
+    # SQLAlchemy 모델을 Pydantic 모델로 자동 변환 허용
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductSalesListResponse(BaseModel):
+    """
+    상품별 판매 목록 응답.
+    아이템 목록과 함께 카테고리 필터링용 분류 목록도 반환합니다.
+    """
+    year: int
+    month: int
+    total_products: int                     # 전체 상품 수
+    total_quantity: int                     # 전체 판매 수량 합계
+    categories: List[str]                   # 카테고리 목록 (프론트 필터용)
+    items: List[ProductSalesItem]           # 상품별 데이터 (수량 내림차순)
+
+
+class ProductSalesUploadResponse(BaseModel):
+    """
+    상품별 판매 xlsx 업로드 결과 응답.
+    파싱 성공 건수와 연/월 정보를 반환합니다.
+    """
+    success: bool
+    inserted: int           # 실제 삽입된 행 수
+    year: int               # 파싱된 연도
+    month: int              # 파싱된 월
+    message: str            # 처리 결과 메시지

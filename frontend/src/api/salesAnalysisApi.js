@@ -187,6 +187,65 @@ export async function generateAiInsight(year, month) {
 }
 
 // ─────────────────────────────────────────
+// 상품별 월간 판매 API
+// ─────────────────────────────────────────
+
+/**
+ * 월별 상품 판매 현황 조회.
+ * 판매 수량 내림차순으로 정렬된 목록과 카테고리 필터용 목록을 반환합니다.
+ * @param {number} year - 조회 연도
+ * @param {number} month - 조회 월
+ * @param {string|null} category - 카테고리 필터 (null이면 전체)
+ * @returns {Promise<ProductSalesListResponse>}
+ */
+export async function fetchProductSales(year, month, category = null) {
+  const params = new URLSearchParams({ year, month });
+  if (category) params.append("category", category);
+  return request(`${BASE_URL}/product-sales?${params}`);
+}
+
+/**
+ * 상품별매출 xlsx 파일을 업로드하고 DB에 저장합니다.
+ * 같은 연/월의 기존 데이터는 삭제 후 재삽입됩니다.
+ * @param {File} file - 상품별매출_YYYYMM.xlsx 파일
+ * @returns {Promise<ProductSalesUploadResponse>}
+ */
+export async function uploadProductSales(file) {
+  // FormData 사용 — Content-Type은 브라우저가 자동으로 multipart/form-data 설정
+  const formData = new FormData();
+  formData.append("file", file);
+
+  // JWT 토큰 직접 삽입 (apiRequest는 FormData를 자동 처리하지만
+  // 여기서는 fetch를 직접 호출하여 토큰 헤더를 수동으로 삽입합니다)
+  const token = localStorage.getItem("access_token");
+  const response = await fetch(`${BASE_URL}/product-sales/upload`, {
+    method: "POST",
+    body: formData,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // Content-Type은 FormData 사용 시 브라우저가 자동 설정 (boundary 포함)
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "파일 업로드 중 오류가 발생했습니다.");
+  }
+  return response.json();
+}
+
+/**
+ * 특정 연/월의 상품별 판매 데이터 전체 삭제.
+ * admin / manager 권한 필요.
+ * @param {number} year - 삭제할 연도
+ * @param {number} month - 삭제할 월
+ */
+export async function deleteProductSales(year, month) {
+  const params = new URLSearchParams({ year, month });
+  return request(`${BASE_URL}/product-sales?${params}`, { method: "DELETE" });
+}
+
+// ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
 
