@@ -1,12 +1,12 @@
 // ============================================================
 // AccountingPage.jsx - 세무/회계 관리 메인 페이지
-// 9개 탭 - 매출/지출/손익/지분/리포트/상품별매출 + 일일마감/고정비설정/월별고정비
+// 8개 탭 - 매출/지출/손익/지분/리포트 + 일일마감/고정비설정/월별고정비
 // ※ 일일마감·고정비 탭은 운영관리(OperationsPage)에서 이동됨
+// ※ 상품별 매출 탭은 매출 분석(SalesAnalysisPage)으로 이동됨
 // ============================================================
 
 import { useState } from "react";
-import { useAuth } from "../contexts/AuthContext";
-import { DollarSign, ChevronLeft, ChevronRight, TrendingUp, List, BarChart2, Users, FileText, Wallet, Settings, ShoppingBag } from "lucide-react";
+import { DollarSign, ChevronLeft, ChevronRight, TrendingUp, List, BarChart2, Users, FileText, Wallet, Settings } from "lucide-react";
 import ProfitLossCard    from "../components/modules/accounting/ProfitLossCard";
 import SalesList         from "../components/modules/accounting/SalesList";
 import ExpenseList       from "../components/modules/accounting/ExpenseList";
@@ -15,20 +15,19 @@ import MonthlyReport     from "../components/modules/accounting/MonthlyReport";
 import DailyClosingForm  from "../components/modules/operations/DailyClosingForm";
 import FixedCostSettings from "../components/modules/operations/FixedCostSettings";
 import FixedCostMonthly  from "../components/modules/operations/FixedCostMonthly";
-// 상품별 월간 판매 현황 탭 컴포넌트 추가
-import ProductSalesTab   from "../components/modules/accounting/ProductSalesTab";
+// ※ ProductSalesTab import 제거 — 매출 분석(SalesAnalysisPage)으로 이동됨
 
-// 9개 탭 메뉴 정의 (기존 8개 + 상품별 매출 탭)
+// 8개 탭 메뉴 정의
+// ※ 상품별 매출 탭은 매출 분석(SalesAnalysisPage)으로 이동됨
 const TABS = [
-  { id: "sales",          label: "매출 관리",    Icon: TrendingUp  },
-  { id: "expenses",       label: "지출 관리",    Icon: List        },
-  { id: "overview",       label: "손익 현황",    Icon: BarChart2   },
-  { id: "dividend",       label: "지분 정산",    Icon: Users       },
-  { id: "report",         label: "리포트 출력",  Icon: FileText    },
-  { id: "product-sales",  label: "상품별 매출",  Icon: ShoppingBag },
-  { id: "closing",        label: "일일마감",     Icon: Wallet      },
-  { id: "fixed-setup",    label: "고정비 설정",  Icon: Settings    },
-  { id: "fixed-monthly",  label: "월별 고정비",  Icon: BarChart2   },
+  { id: "sales",         label: "매출 관리",   Icon: TrendingUp },
+  { id: "expenses",      label: "지출 관리",   Icon: List       },
+  { id: "overview",      label: "손익 현황",   Icon: BarChart2  },
+  { id: "dividend",      label: "지분 정산",   Icon: Users      },
+  { id: "report",        label: "리포트 출력", Icon: FileText   },
+  { id: "closing",       label: "일일마감",    Icon: Wallet     },
+  { id: "fixed-setup",   label: "고정비 설정", Icon: Settings   },
+  { id: "fixed-monthly", label: "월별 고정비", Icon: BarChart2  },
 ];
 
 const AccountingPage = () => {
@@ -36,10 +35,6 @@ const AccountingPage = () => {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [activeTab, setActiveTab] = useState("sales");
-
-  // 로그인한 사용자 역할 — 상품별 매출 탭에서 업로드/삭제 권한 판별에 사용
-  const { user } = useAuth();
-  const userRole = user?.role || "staff";
 
   const handlePrevMonth = () => {
     if (month === 1) { setYear((y) => y - 1); setMonth(12); }
@@ -118,11 +113,6 @@ const AccountingPage = () => {
         {/* 리포트 출력 탭 */}
         {activeTab === "report" && (
           <MonthlyReport year={year} month={month} />
-        )}
-
-        {/* 상품별 매출 탭 — POS 엑셀 파싱 상품 순위 */}
-        {activeTab === "product-sales" && (
-          <ProductSalesTab year={year} month={month} userRole={userRole} />
         )}
 
         {/* 일일마감 탭 — 운영관리에서 이동 */}

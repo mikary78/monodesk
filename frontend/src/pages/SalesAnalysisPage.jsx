@@ -1,28 +1,33 @@
 // ============================================================
 // SalesAnalysisPage.jsx — 매출 분석 메인 페이지
-// PRD 2: POS 연동, 매출 트렌드, 메뉴 분석, 시간대 분석, 결제 수단 분석
+// PRD 2: POS 연동, 매출 트렌드, 메뉴 분석, 시간대 분석, 결제 수단 분석, 상품별 매출
 // ============================================================
 
 import { useState } from "react";
 import {
   TrendingUp, Upload, UtensilsCrossed, Clock,
-  CreditCard, ChevronLeft, ChevronRight, Sparkles,
+  CreditCard, ChevronLeft, ChevronRight, Sparkles, ShoppingBag,
 } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 import PosImport from "../components/modules/sales/PosImport";
 import SalesTrend from "../components/modules/sales/SalesTrend";
 import MenuAnalysis from "../components/modules/sales/MenuAnalysis";
 import TimeAnalysis from "../components/modules/sales/TimeAnalysis";
 import PaymentAnalysis from "../components/modules/sales/PaymentAnalysis";
 import AiInsight from "../components/modules/sales/AiInsight";
+// 상품별 월간 판매 현황 탭 — AccountingPage에서 매출 분석 페이지로 이동
+import ProductSalesTab from "../components/modules/accounting/ProductSalesTab";
 
-// 탭 메뉴 정의 (PRD 2-1 ~ 2-6)
+// 탭 메뉴 정의 (PRD 2-1 ~ 2-7)
+// ※ "상품별 매출" 탭은 AccountingPage에서 이곳으로 이동 — 매출 관련 탭을 한 곳에서 관리
 const TABS = [
-  { id: "import",   label: "POS 연동",    Icon: Upload },
-  { id: "trend",    label: "매출 트렌드",  Icon: TrendingUp },
-  { id: "menu",     label: "메뉴 분석",    Icon: UtensilsCrossed },
-  { id: "time",     label: "시간대 분석",  Icon: Clock },
-  { id: "payment",  label: "결제 수단",    Icon: CreditCard },
-  { id: "ai",       label: "AI 인사이트",  Icon: Sparkles },
+  { id: "import",        label: "POS 연동",    Icon: Upload },
+  { id: "trend",         label: "매출 트렌드",  Icon: TrendingUp },
+  { id: "menu",          label: "메뉴 분석",    Icon: UtensilsCrossed },
+  { id: "time",          label: "시간대 분석",  Icon: Clock },
+  { id: "payment",       label: "결제 수단",    Icon: CreditCard },
+  { id: "product-sales", label: "상품별 매출",  Icon: ShoppingBag },
+  { id: "ai",            label: "AI 인사이트",  Icon: Sparkles },
 ];
 
 // 매출 분석 메인 페이지 컴포넌트
@@ -31,6 +36,9 @@ const SalesAnalysisPage = () => {
   // 현재 조회 연월
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
+  // 로그인 사용자 역할 — ProductSalesTab 업로드/삭제 권한 판별에 사용
+  const { user } = useAuth();
+  const userRole = user?.role || "staff";
   // 활성 탭
   const [activeTab, setActiveTab] = useState("import");
   // POS 가져오기 성공 시 트렌드 탭 갱신 트리거
@@ -143,6 +151,11 @@ const SalesAnalysisPage = () => {
         {/* 결제 수단 탭 */}
         {activeTab === "payment" && (
           <PaymentAnalysis year={year} month={month} />
+        )}
+
+        {/* 상품별 매출 탭 — POS 엑셀 파싱 상품 순위 (AccountingPage에서 이동) */}
+        {activeTab === "product-sales" && (
+          <ProductSalesTab year={year} month={month} userRole={userRole} />
         )}
 
         {/* AI 인사이트 탭 */}

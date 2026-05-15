@@ -1,9 +1,13 @@
 // ============================================================
 // ExpenseList.jsx — 지출 목록 테이블 컴포넌트
 // 월별 지출 내역을 테이블 형식으로 표시합니다.
+// 전체 데이터는 한 번에 조회하고, "더보기" 방식으로 30건씩 화면에 추가 표시합니다.
 // ============================================================
 
 import { useState, useEffect, useCallback } from "react";
+
+// 한 번에 표시할 건수 — 초기 30건, "더보기" 클릭 시 30건씩 추가
+const PAGE_SIZE = 30;
 import { Pencil, Trash2, Plus, Search, ScanLine } from "lucide-react";
 import { fetchExpenses, deleteExpense, fetchCategories, formatCurrency } from "../../../api/accountingApi";
 import ExpenseForm from "./ExpenseForm";
@@ -18,7 +22,7 @@ import ReceiptScanner from "../../common/ReceiptScanner";
  */
 const ExpenseList = ({ year, month }) => {
   const toast = useToast();
-  // 지출 목록 데이터
+  // 지출 목록 데이터 (API에서 전체를 한 번에 받아옴)
   const [expenses, setExpenses] = useState([]);
   // 전체 건수
   const [total, setTotal] = useState(0);
@@ -36,8 +40,10 @@ const ExpenseList = ({ year, month }) => {
   const [confirmState, setConfirmState] = useState({ open: false, targetId: null, targetName: "" });
   // 영수증 스캐너 모달 표시 여부
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
+  // 현재 화면에 표시할 건수 — 초기값 PAGE_SIZE(30)
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
 
-  /** 지출 목록 데이터 불러오기 */
+  /** 지출 목록 데이터 불러오기 — 전체를 한 번에 API로 가져옴 */
   const loadExpenses = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -53,8 +59,10 @@ const ExpenseList = ({ year, month }) => {
     }
   }, [year, month, selectedCategory]);
 
-  // 연월 또는 필터 변경 시 데이터 다시 불러오기
+  // 연월 또는 필터 변경 시 데이터 다시 불러오기 + 표시 건수 초기화
+  // (예: 4월→3월 이동 시 "더보기"로 늘어난 건수를 PAGE_SIZE로 되돌림)
   useEffect(() => {
+    setDisplayCount(PAGE_SIZE); // 연월·필터 바뀔 때마다 처음 30건부터 다시 표시
     loadExpenses();
   }, [loadExpenses]);
 
@@ -182,75 +190,102 @@ const ExpenseList = ({ year, month }) => {
             <p className="text-sm">데이터가 없습니다.</p>
             <p className="text-xs mt-1">지출 입력 버튼을 눌러 첫 항목을 추가해보세요.</p>
           </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
-                <th className="px-4 py-3 text-left">날짜</th>
-                <th className="px-4 py-3 text-left">분류</th>
-                <th className="px-4 py-3 text-left">거래처</th>
-                <th className="px-4 py-3 text-left">내용</th>
-                <th className="px-4 py-3 text-left">결제</th>
-                <th className="px-4 py-3 text-right">공급가액</th>
-                <th className="px-4 py-3 text-right">합계</th>
-                <th className="px-4 py-3 text-center">관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {expenses.map((expense, idx) => (
-                <tr
-                  key={expense.id}
-                  className={`border-b border-slate-100 hover:bg-blue-50 transition-colors ${
-                    idx % 2 === 1 ? "bg-slate-50/50" : ""
-                  }`}
-                >
-                  <td className="px-4 py-3 text-sm text-slate-600">{expense.expense_date}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="px-2 py-1 rounded text-xs font-medium"
-                      style={{
-                        backgroundColor: `${expense.category?.color}20`,
-                        color: expense.category?.color,
-                      }}
+        ) : (() => {
+          // 전체 데이터에서 현재 표시 건수만큼만 slice — 더보기 방식 구현
+          const visibleExpenses = expenses.slice(0, displayCount);
+          // 아직 표시되지 않은 항목이 남아있는지 여부
+          const hasMore = displayCount < expenses.length;
+
+          return (
+            <>
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase">
+                    <th className="px-4 py-3 text-left">날짜</th>
+                    <th className="px-4 py-3 text-left">분류</th>
+                    <th className="px-4 py-3 text-left">거래처</th>
+                    <th className="px-4 py-3 text-left">내용</th>
+                    <th className="px-4 py-3 text-left">결제</th>
+                    <th className="px-4 py-3 text-right">공급가액</th>
+                    <th className="px-4 py-3 text-right">합계</th>
+                    <th className="px-4 py-3 text-center">관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleExpenses.map((expense, idx) => (
+                    <tr
+                      key={expense.id}
+                      className={`border-b border-slate-100 hover:bg-blue-50 transition-colors ${
+                        idx % 2 === 1 ? "bg-slate-50/50" : ""
+                      }`}
                     >
-                      {expense.category?.name || "-"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{expense.vendor || "-"}</td>
-                  <td className="px-4 py-3 text-sm text-slate-900">{expense.description}</td>
-                  <td className="px-4 py-3 text-sm text-slate-500">{expense.payment_method}</td>
-                  {/* 금액은 오른쪽 정렬 */}
-                  <td className="px-4 py-3 text-sm text-right text-slate-900">
-                    {formatCurrency(expense.amount)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-right font-semibold text-slate-900">
-                    {formatCurrency(expense.total_amount)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      {/* 수정 버튼 */}
-                      <button
-                        onClick={() => { setEditingExpense(expense); setShowForm(false); }}
-                        className="text-slate-400 hover:text-blue-500 transition-colors"
-                        title="수정"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      {/* 삭제 버튼 */}
-                      <button
-                        onClick={() => handleDeleteClick(expense.id, expense.description)}
-                        className="text-slate-400 hover:text-red-500 transition-colors"
-                        title="삭제"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+                      <td className="px-4 py-3 text-sm text-slate-600">{expense.expense_date}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className="px-2 py-1 rounded text-xs font-medium"
+                          style={{
+                            backgroundColor: `${expense.category?.color}20`,
+                            color: expense.category?.color,
+                          }}
+                        >
+                          {expense.category?.name || "-"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{expense.vendor || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-900">{expense.description}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{expense.payment_method}</td>
+                      {/* 금액은 오른쪽 정렬 */}
+                      <td className="px-4 py-3 text-sm text-right text-slate-900">
+                        {formatCurrency(expense.amount)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-semibold text-slate-900">
+                        {formatCurrency(expense.total_amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          {/* 수정 버튼 */}
+                          <button
+                            onClick={() => { setEditingExpense(expense); setShowForm(false); }}
+                            className="text-slate-400 hover:text-blue-500 transition-colors"
+                            title="수정"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          {/* 삭제 버튼 */}
+                          <button
+                            onClick={() => handleDeleteClick(expense.id, expense.description)}
+                            className="text-slate-400 hover:text-red-500 transition-colors"
+                            title="삭제"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* 테이블 하단 — 표시 건수 현황 + 더보기 버튼 */}
+              <div className="px-4 py-4 flex flex-col items-center gap-3 border-t border-slate-100">
+                {/* 현재 표시 건수 / 전체 건수 안내 */}
+                <p className="text-xs text-slate-400">
+                  {visibleExpenses.length} / {expenses.length}건 표시 중
+                </p>
+
+                {/* 더보기 버튼 — 표시할 항목이 남아있을 때만 렌더링 */}
+                {hasMore && (
+                  <button
+                    onClick={() => setDisplayCount((c) => c + PAGE_SIZE)}
+                    className="px-6 py-2 border border-slate-300 rounded-md text-sm text-slate-600 hover:bg-slate-50 hover:border-slate-400 transition-colors"
+                  >
+                    더보기 ({expenses.length - displayCount}건 남음)
+                  </button>
+                )}
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );

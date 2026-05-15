@@ -1,6 +1,6 @@
 // ============================================================
 // PosImport.jsx — POS 데이터 가져오기 탭 컴포넌트
-// CSV 파일 업로드 및 가져오기 이력 관리 화면입니다.
+// CSV / Excel 파일 업로드 및 가져오기 이력 관리 화면입니다.
 // ============================================================
 
 import { useState, useEffect, useRef } from "react";
@@ -58,10 +58,10 @@ const PosImport = ({ onImportSuccess }) => {
   const handleFileUpload = async (file) => {
     if (!file) return;
 
-    // 확장자 검사
+    // 확장자 검사 — CSV(.csv, .txt)와 Excel(.xlsx) 모두 허용
     const ext = file.name.split(".").pop().toLowerCase();
-    if (!["csv", "txt"].includes(ext)) {
-      showMessage("error", "CSV 파일만 업로드 가능합니다. (.csv, .txt)");
+    if (!["csv", "txt", "xlsx"].includes(ext)) {
+      showMessage("error", "CSV 또는 Excel 파일만 업로드 가능합니다. (.csv, .txt, .xlsx)");
       return;
     }
 
@@ -152,7 +152,7 @@ const PosImport = ({ onImportSuccess }) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.txt"
+            accept=".csv,.txt,.xlsx"
             onChange={handleInputChange}
             className="hidden"
           />
@@ -169,10 +169,10 @@ const PosImport = ({ onImportSuccess }) => {
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-700">
-                  CSV 파일을 여기에 드래그하거나 클릭하여 업로드
+                  CSV / Excel 파일을 여기에 드래그하거나 클릭하여 업로드
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  지원 형식: CSV (.csv, .txt) · 최대 10MB · UTF-8 / 한글(EUC-KR) 모두 지원
+                  지원 형식: CSV (.csv, .txt) · Excel (.xlsx) · 최대 10MB · UTF-8 / 한글(EUC-KR) 모두 지원
                 </p>
               </div>
             </div>
