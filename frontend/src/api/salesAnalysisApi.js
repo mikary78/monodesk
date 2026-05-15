@@ -20,10 +20,14 @@ const BASE_URL = `${API_BASE}/api/sales-analysis`;
 export async function importPosCsv(file) {
   const formData = new FormData();
   formData.append("file", file);
+  // JWT 토큰 삽입 — FormData 업로드 시 apiRequest가 Content-Type을 덮어쓰므로 raw fetch 사용
+  const token = localStorage.getItem("access_token");
   const response = await fetch(`${BASE_URL}/import`, {
     method: "POST",
     body: formData,
-    // Content-Type은 FormData 사용 시 자동 설정 (boundary 포함)
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
