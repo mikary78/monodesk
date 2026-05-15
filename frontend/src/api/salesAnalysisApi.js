@@ -18,23 +18,13 @@ const BASE_URL = `${API_BASE}/api/sales-analysis`;
  * @returns {Promise<object>} 가져오기 결과
  */
 export async function importPosCsv(file) {
+  // apiRequest는 body가 FormData일 때 Content-Type을 자동 처리하고 Authorization도 포함
   const formData = new FormData();
   formData.append("file", file);
-  // JWT 토큰 삽입 — FormData 업로드 시 apiRequest가 Content-Type을 덮어쓰므로 raw fetch 사용
-  const token = localStorage.getItem("access_token");
-  const response = await fetch(`${BASE_URL}/import`, {
+  return request(`${BASE_URL}/import`, {
     method: "POST",
     body: formData,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
   });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const message = errorData.detail || "파일 업로드 중 오류가 발생했습니다.";
-    throw new Error(message);
-  }
-  return response.json();
 }
 
 /**
