@@ -87,7 +87,7 @@ def get_expenses(
     month: int = Query(..., ge=1, le=12, description="조회 월"),
     category_id: Optional[int] = Query(None, description="분류 필터"),
     skip: int = Query(0, ge=0, description="페이지 오프셋"),
-    limit: int = Query(50, ge=1, le=200, description="페이지 크기"),
+    limit: int = Query(1000, ge=1, le=1000, description="페이지 크기"),
     db: Session = Depends(get_db),
     _: User = Depends(require_role("admin", "manager")),
 ):

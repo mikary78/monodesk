@@ -51,7 +51,7 @@ export async function deleteCategory(categoryId) {
  * @param {object} filters - 필터 옵션 (categoryId, skip, limit)
  */
 export async function fetchExpenses(year, month, filters = {}) {
-  const params = new URLSearchParams({ year, month, ...filters });
+  const params = new URLSearchParams({ year, month, limit: 1000, ...filters });
   return request(`${BASE_URL}/expenses?${params}`);
 }
 
