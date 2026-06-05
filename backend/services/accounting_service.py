@@ -4,14 +4,16 @@
 # ============================================================
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, distinct
 from typing import List, Optional
 from models.accounting import ExpenseCategory, ExpenseRecord, SalesRecord
+from models.operations import Vendor
 from models.sales_analysis import PosSalesRaw
 from schemas.accounting import (
     ExpenseCategoryCreate, ExpenseCategoryUpdate,
     ExpenseRecordCreate, ExpenseRecordUpdate,
-    SalesRecordCreate, SalesRecordUpdate, ProfitLossResponse
+    SalesRecordCreate, SalesRecordUpdate, ProfitLossResponse,
+    VendorStatItem
 )
 
 
@@ -114,23 +116,110 @@ def get_expense_by_id(db: Session, expense_id: int) -> Optional[ExpenseRecord]:
     ).first()
 
 
+def _sync_vendor(db: Session, vendor_name: Optional[str], category_name: Optional[str]) -> None:
+    """
+    vendors 테이블 자동 연동 내부 유틸.
+    지출 저장 시 거래처명이 있고 vendors 테이블에 미등록된 경우 자동으로 신규 등록합니다.
+
+    - 이미 등록된 거래처는 업데이트하지 않습니다.
+    - 오류 발생 시 조용히 무시합니다 (지출 저장은 계속 진행).
+
+    지출 분류명 → vendors 카테고리 매핑 규칙:
+      식재료비 → 식자재
+      주류비   → 주류
+      소모품비 → 소모품
+      인건비   → 인건비
+      그 외    → 기타
+    """
+    # 거래처명이 없으면 연동 대상이 아님
+    if not vendor_name or not vendor_name.strip():
+        return
+
+    try:
+        # 지출 분류명 → 거래처 카테고리 변환 맵
+        category_map = {
+            "식재료비": "식자재",
+            "주류비":   "주류",
+            "소모품비": "소모품",
+            "인건비":   "인건비",
+        }
+        vendor_category = category_map.get(category_name or "", "기타")
+
+        # vendors 테이블에서 동일 이름의 활성 거래처 검색
+        existing = db.query(Vendor).filter(
+            Vendor.name == vendor_name.strip(),
+            Vendor.is_deleted == 0
+        ).first()
+
+        # 이미 등록된 거래처는 스킵 (업데이트 안 함)
+        if existing:
+            return
+
+        # 미등록 거래처 → 자동 생성
+        new_vendor = Vendor(
+            name=vendor_name.strip(),
+            category=vendor_category,
+        )
+        db.add(new_vendor)
+        db.flush()  # commit 전에 ID 확보 (부모 트랜잭션에 합류)
+
+    except Exception as e:
+        # 거래처 연동 실패가 지출 저장을 막아서는 안 됨
+        print(f"[vendors 자동 연동 무시] {vendor_name}: {e}")
+
+
 def create_expense(db: Session, data: ExpenseRecordCreate) -> ExpenseRecord:
-    """새 지출 기록 생성"""
+    """
+    새 지출 기록 생성.
+    거래처명이 있으면 vendors 테이블에 자동 연동을 시도합니다.
+    """
     expense = ExpenseRecord(**data.model_dump())
     db.add(expense)
+
+    # 거래처명이 있으면 분류명을 조회하여 vendors 자동 등록 시도
+    if expense.vendor:
+        try:
+            # 지출 분류명 조회 (vendor_category 매핑에 필요)
+            category = db.query(ExpenseCategory).filter(
+                ExpenseCategory.id == expense.category_id,
+                ExpenseCategory.is_deleted == 0
+            ).first()
+            category_name = category.name if category else None
+            _sync_vendor(db, expense.vendor, category_name)
+        except Exception as e:
+            print(f"[vendors 연동 오류 무시] create_expense: {e}")
+
     db.commit()
     db.refresh(expense)
     return expense
 
 
 def update_expense(db: Session, expense_id: int, data: ExpenseRecordUpdate) -> Optional[ExpenseRecord]:
-    """지출 기록 수정"""
+    """
+    지출 기록 수정.
+    거래처명이 변경된 경우 vendors 테이블 자동 연동을 시도합니다.
+    """
     expense = get_expense_by_id(db, expense_id)
     if not expense:
         return None
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(expense, key, value)
+
+    # 거래처명이 수정된 경우 vendors 자동 연동 시도
+    if "vendor" in update_data and update_data["vendor"]:
+        try:
+            # 분류 ID가 수정됐을 수 있으므로 최신 category_id를 사용
+            cat_id = update_data.get("category_id", expense.category_id)
+            category = db.query(ExpenseCategory).filter(
+                ExpenseCategory.id == cat_id,
+                ExpenseCategory.is_deleted == 0
+            ).first()
+            category_name = category.name if category else None
+            _sync_vendor(db, update_data["vendor"], category_name)
+        except Exception as e:
+            print(f"[vendors 연동 오류 무시] update_expense: {e}")
+
     db.commit()
     db.refresh(expense)
     return expense
@@ -144,6 +233,118 @@ def delete_expense(db: Session, expense_id: int) -> bool:
     expense.is_deleted = 1
     db.commit()
     return True
+
+
+def get_vendor_stats(
+    db: Session,
+    year: int,
+    month: Optional[int] = None
+) -> List[VendorStatItem]:
+    """
+    거래처별 지출 통계 집계.
+
+    - expense_records를 vendor로 GROUP BY하여 구매 횟수, 총 금액, 최근 구매일을 집계합니다.
+    - LEFT JOIN vendors ON name 매칭으로 vendors 테이블 등록 여부를 확인합니다.
+    - vendor가 None 또는 빈 문자열인 레코드는 "미입력"으로 묶어 맨 아래에 배치합니다.
+    - total_amount DESC 정렬, 단 "미입력"은 항상 맨 뒤.
+
+    @param year  - 조회 연도 (필수)
+    @param month - 조회 월 (None이면 해당 연도 전체)
+    @return List[VendorStatItem]
+    """
+    # ── 날짜 범위 계산 ──────────────────────────────────────────
+    if month:
+        # 특정 월만 조회
+        start_date = f"{year}-{month:02d}-01"
+        end_date = f"{year}-{month + 1:02d}-01" if month < 12 else f"{year + 1}-01-01"
+    else:
+        # 연도 전체 조회
+        start_date = f"{year}-01-01"
+        end_date = f"{year + 1}-01-01"
+
+    # ── 거래처별 집계 쿼리 ─────────────────────────────────────
+    # coalesce로 vendor가 NULL이면 빈 문자열로 치환하여 그룹 처리
+    vendor_col = func.coalesce(ExpenseRecord.vendor, "").label("vendor_key")
+
+    rows = db.query(
+        vendor_col,
+        func.count(ExpenseRecord.id).label("purchase_count"),
+        # amount + vat = 총 지출금액
+        func.sum(ExpenseRecord.amount + func.coalesce(ExpenseRecord.vat, 0)).label("total_amount"),
+        func.max(ExpenseRecord.expense_date).label("last_purchase_date"),
+    ).filter(
+        ExpenseRecord.is_deleted == 0,
+        ExpenseRecord.expense_date >= start_date,
+        ExpenseRecord.expense_date < end_date,
+    ).group_by(
+        vendor_col
+    ).all()
+
+    # ── 카테고리명 목록 조회 (거래처별) ───────────────────────
+    # 거래처별로 사용한 분류명을 별도 쿼리로 조회합니다.
+    # (GROUP_CONCAT은 SQLite에서 지원되지만 SQLAlchemy ORM이 아닌 raw로 처리하면 간단하나,
+    #  ORM 방식으로 개별 조회하여 호환성을 유지합니다.)
+    from sqlalchemy import text as sa_text
+    category_rows = db.execute(sa_text("""
+        SELECT
+            COALESCE(er.vendor, '') AS vendor_key,
+            ec.name                 AS cat_name
+        FROM expense_records er
+        LEFT JOIN expense_categories ec ON ec.id = er.category_id AND ec.is_deleted = 0
+        WHERE er.is_deleted = 0
+          AND er.expense_date >= :start_date
+          AND er.expense_date < :end_date
+        GROUP BY COALESCE(er.vendor, ''), ec.name
+    """), {"start_date": start_date, "end_date": end_date}).fetchall()
+
+    # 거래처명 → 분류명 목록 딕셔너리로 변환
+    cat_map: dict[str, List[str]] = {}
+    for cat_row in category_rows:
+        vkey = cat_row[0]  # vendor_key
+        cname = cat_row[1]  # cat_name (NULL 가능)
+        if vkey not in cat_map:
+            cat_map[vkey] = []
+        if cname and cname not in cat_map[vkey]:
+            cat_map[vkey].append(cname)
+
+    # ── vendors 테이블 매칭 ────────────────────────────────────
+    # 활성 거래처 전체를 한 번에 조회하여 이름 → ID 매핑 딕셔너리 생성
+    vendor_records = db.query(Vendor).filter(Vendor.is_deleted == 0).all()
+    vendor_id_map: dict[str, int] = {v.name: v.id for v in vendor_records}
+
+    # ── 결과 조립 ─────────────────────────────────────────────
+    normal_items: List[VendorStatItem] = []   # 거래처명이 있는 항목
+    unknown_item: Optional[VendorStatItem] = None  # "미입력" 항목
+
+    for row in rows:
+        vendor_key = row.vendor_key  # "" 또는 거래처명
+        vendor_name = vendor_key if vendor_key else "미입력"
+        categories = cat_map.get(vendor_key, [])
+        vid = vendor_id_map.get(vendor_key) if vendor_key else None
+
+        item = VendorStatItem(
+            vendor_name=vendor_name,
+            purchase_count=row.purchase_count,
+            total_amount=float(row.total_amount or 0),
+            last_purchase_date=row.last_purchase_date or "",
+            categories=categories,
+            vendor_id=vid,
+        )
+
+        if vendor_key == "":
+            # 거래처 미입력 항목은 별도 보관하여 맨 뒤에 배치
+            unknown_item = item
+        else:
+            normal_items.append(item)
+
+    # 금액 기준 내림차순 정렬
+    normal_items.sort(key=lambda x: x.total_amount, reverse=True)
+
+    # "미입력" 항목을 맨 뒤에 추가
+    if unknown_item:
+        normal_items.append(unknown_item)
+
+    return normal_items
 
 
 # ─────────────────────────────────────────

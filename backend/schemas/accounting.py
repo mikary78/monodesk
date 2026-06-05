@@ -244,6 +244,29 @@ class ProfitLossResponse(BaseModel):
 
 
 # ─────────────────────────────────────────
+# 거래처 통계 스키마
+# ─────────────────────────────────────────
+
+class VendorStatItem(BaseModel):
+    """
+    거래처별 지출 통계 응답 항목 스키마.
+    expense_records 테이블을 vendor로 GROUP BY 집계한 결과입니다.
+    """
+    # 거래처명 (vendor 컬럼값, 없으면 "미입력")
+    vendor_name: str
+    # 해당 거래처의 지출 건수
+    purchase_count: int
+    # 해당 거래처의 총 지출금액 (공급가액 + 부가세 합계)
+    total_amount: float
+    # 가장 최근 구매 날짜 (YYYY-MM-DD)
+    last_purchase_date: str
+    # 이 거래처에서 사용된 지출 분류명 목록 (예: ["식재료비", "소모품비"])
+    categories: List[str]
+    # vendors 테이블에 등록된 경우 해당 ID, 미등록 시 None
+    vendor_id: Optional[int] = None
+
+
+# ─────────────────────────────────────────
 # 공통 응답 래퍼
 # ─────────────────────────────────────────
 

@@ -5,15 +5,17 @@
 // ============================================================
 
 import { useState, useEffect, useCallback } from "react";
+import { Pencil, Trash2, Plus, Search, ScanLine, Store } from "lucide-react";
 
 // 한 번에 표시할 건수 — 초기 30건, "더보기" 클릭 시 30건씩 추가
 const PAGE_SIZE = 30;
-import { Pencil, Trash2, Plus, Search, ScanLine } from "lucide-react";
 import { fetchExpenses, deleteExpense, fetchCategories, formatCurrency } from "../../../api/accountingApi";
 import ExpenseForm from "./ExpenseForm";
 import { useToast } from "../../../contexts/ToastContext";
 import ConfirmDialog from "../../common/ConfirmDialog";
 import ReceiptScanner from "../../common/ReceiptScanner";
+// 거래처별 지출 현황 패널 — 토글로 표시/숨김
+import VendorStatsPanel from "./VendorStatsPanel";
 
 /**
  * 지출 목록 테이블 컴포넌트.
@@ -42,6 +44,8 @@ const ExpenseList = ({ year, month }) => {
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   // 현재 화면에 표시할 건수 — 초기값 PAGE_SIZE(30)
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  // 거래처 현황 패널 표시 여부 — 토글 버튼으로 제어
+  const [showVendorStats, setShowVendorStats] = useState(false);
 
   /** 지출 목록 데이터 불러오기 — 전체를 한 번에 API로 가져옴 */
   const loadExpenses = useCallback(async () => {
@@ -129,6 +133,19 @@ const ExpenseList = ({ year, month }) => {
           <span className="ml-2 text-sm font-normal text-slate-400">총 {total}건</span>
         </h3>
         <div className="flex items-center gap-2">
+          {/* 거래처 현황 토글 버튼 — 클릭 시 VendorStatsPanel 표시/숨김 */}
+          <button
+            onClick={() => setShowVendorStats((prev) => !prev)}
+            className={`h-9 px-4 rounded-md text-sm font-semibold flex items-center gap-1 transition-colors border ${
+              showVendorStats
+                ? "bg-slate-700 text-white border-slate-700"
+                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 hover:border-slate-400"
+            }`}
+            title="거래처별 지출 현황을 펼치거나 접습니다"
+          >
+            <Store size={14} />
+            거래처 현황
+          </button>
           {/* 영수증 스캔 버튼 — OCR 자동 입력 */}
           <button
             onClick={() => setShowReceiptScanner(true)}
@@ -148,6 +165,14 @@ const ExpenseList = ({ year, month }) => {
           </button>
         </div>
       </div>
+
+      {/* 거래처 현황 패널 — 토글 버튼 클릭 시 지출 목록 위에 표시
+          year/month는 ExpenseList의 현재 조회 기준을 그대로 전달합니다 */}
+      {showVendorStats && (
+        <div className="px-6 pt-4">
+          <VendorStatsPanel year={year} month={month} />
+        </div>
+      )}
 
       {/* 신규 입력 또는 수정 폼 */}
       {(showForm || editingExpense) && (

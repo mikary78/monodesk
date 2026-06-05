@@ -11,7 +11,7 @@ from schemas.accounting import (
     ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCategoryResponse,
     ExpenseRecordCreate, ExpenseRecordUpdate, ExpenseRecordResponse,
     SalesRecordCreate, SalesRecordUpdate, SalesRecordResponse,
-    ProfitLossResponse
+    ProfitLossResponse, VendorStatItem
 )
 import services.accounting_service as service
 from auth import require_role
@@ -209,6 +209,29 @@ def delete_sales(
     if not success:
         raise HTTPException(status_code=404, detail="해당 매출 기록을 찾을 수 없습니다.")
     return {"success": True, "message": "매출 기록이 삭제되었습니다."}
+
+
+# ─────────────────────────────────────────
+# 거래처 통계 API
+# ─────────────────────────────────────────
+
+@router.get("/vendor-stats", response_model=list[VendorStatItem])
+def get_vendor_stats(
+    year: int = Query(..., ge=2020, le=2099, description="조회 연도"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="조회 월 (없으면 연도 전체)"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """
+    거래처별 지출 통계 조회.
+    - year만 입력: 해당 연도 전체 집계
+    - year + month 입력: 해당 월 집계
+    - 총금액 내림차순 정렬, 거래처 미입력은 맨 아래 표시
+    """
+    try:
+        return service.get_vendor_stats(db, year, month)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"거래처 통계 조회 중 오류가 발생했습니다: {str(e)}")
 
 
 # ─────────────────────────────────────────

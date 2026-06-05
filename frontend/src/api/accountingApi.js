@@ -136,6 +136,25 @@ export async function seedCategories() {
 }
 
 // ─────────────────────────────────────────
+// 거래처 통계 API
+// ─────────────────────────────────────────
+
+/**
+ * 거래처별 지출 통계 조회.
+ * @param {number} year  - 조회 연도 (필수)
+ * @param {number|null} month - 조회 월 (null이면 연도 전체)
+ * @returns {Promise<Array>} VendorStatItem 목록
+ */
+export async function fetchVendorStats(year, month = null) {
+  // URLSearchParams에 year는 항상 포함, month는 null이면 제외
+  const params = new URLSearchParams({ year });
+  if (month !== null && month !== undefined) {
+    params.append("month", month);
+  }
+  return request(`${BASE_URL}/vendor-stats?${params}`);
+}
+
+// ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
 
