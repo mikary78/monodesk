@@ -100,6 +100,24 @@ def add_missing_columns():
                 except Exception:
                     pass  # 컬럼이 이미 존재하면 무시
 
+        # 지출 품목 테이블 신규 생성 (SQLite)
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS expense_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        expense_id INTEGER NOT NULL REFERENCES expense_records(id) ON DELETE CASCADE,
+                        item_name TEXT NOT NULL,
+                        quantity FLOAT,
+                        unit TEXT,
+                        amount FLOAT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.commit()
+            except Exception:
+                pass
+
         # 상품별 월간 판매 테이블 신규 생성 (SQLite)
         # create_tables()의 create_all이 처리하지만, 기존 DB에는 없을 수 있으므로 명시적 생성
         with engine.connect() as conn:
@@ -147,6 +165,24 @@ def add_missing_columns():
                     conn.commit()
                 except Exception:
                     pass
+
+        # 지출 품목 테이블 신규 생성 (PostgreSQL)
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS expense_items (
+                        id SERIAL PRIMARY KEY,
+                        expense_id INTEGER NOT NULL REFERENCES expense_records(id) ON DELETE CASCADE,
+                        item_name TEXT NOT NULL,
+                        quantity FLOAT,
+                        unit TEXT,
+                        amount FLOAT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.commit()
+            except Exception:
+                pass
 
         # 상품별 월간 판매 테이블 신규 생성 (PostgreSQL)
         # UNIQUE 제약: (year, month, product_code) — 동일 상품 upsert 시 충돌 처리

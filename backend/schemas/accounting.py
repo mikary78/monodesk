@@ -41,6 +41,25 @@ class ExpenseCategoryResponse(ExpenseCategoryBase):
 
 
 # ─────────────────────────────────────────
+# 지출 품목 (ExpenseItem) 스키마
+# ─────────────────────────────────────────
+
+class ExpenseItemCreate(BaseModel):
+    """지출 품목 생성 스키마 — 자유 입력 텍스트 태그"""
+    item_name: str = Field(..., min_length=1, max_length=100, description="품목명")
+    quantity: Optional[float] = Field(None, ge=0, description="수량")
+    unit: Optional[str] = Field(None, max_length=20, description="단위 (kg/g/개/병 등)")
+    amount: Optional[float] = Field(None, ge=0, description="품목 금액 (원)")
+
+
+class ExpenseItemResponse(ExpenseItemCreate):
+    """지출 품목 응답 스키마"""
+    id: int
+    expense_id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─────────────────────────────────────────
 # 지출 기록 (ExpenseRecord) 스키마
 # ─────────────────────────────────────────
 
@@ -78,7 +97,7 @@ class ExpenseRecordBase(BaseModel):
 
 class ExpenseRecordCreate(ExpenseRecordBase):
     """지출 기록 생성 요청 스키마"""
-    pass
+    items: List[ExpenseItemCreate] = Field(default_factory=list, description="구매 품목 목록")
 
 
 class ExpenseRecordUpdate(BaseModel):
@@ -92,6 +111,8 @@ class ExpenseRecordUpdate(BaseModel):
     payment_method: Optional[str] = None
     memo: Optional[str] = None
     tax_invoice: Optional[bool] = None
+    # None이면 품목 유지, []이면 전체 삭제, 배열이면 해당 내용으로 교체
+    items: Optional[List[ExpenseItemCreate]] = Field(None, description="구매 품목 목록 (None=유지, []=전체삭제)")
 
 
 class ExpenseRecordResponse(ExpenseRecordBase):
@@ -99,6 +120,7 @@ class ExpenseRecordResponse(ExpenseRecordBase):
     id: int
     total_amount: float
     category: Optional[ExpenseCategoryResponse] = None
+    items: List[ExpenseItemResponse] = Field(default_factory=list, description="구매 품목 목록")
     created_at: datetime
     updated_at: datetime
 

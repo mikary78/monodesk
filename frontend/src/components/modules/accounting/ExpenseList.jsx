@@ -257,7 +257,28 @@ const ExpenseList = ({ year, month }) => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{expense.vendor || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-slate-900">{expense.description}</td>
+                      <td className="px-4 py-3 text-sm text-slate-900">
+                        <div>{expense.description}</div>
+                        {/* 구매 품목 태그 — 품목이 있을 때만 표시 */}
+                        {expense.items?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {expense.items.map((item, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full"
+                                title={item.amount ? `${Number(item.amount).toLocaleString()}원` : item.item_name}
+                              >
+                                {item.item_name}
+                                {item.quantity != null && item.quantity > 0 && (
+                                  <span className="text-blue-400 ml-0.5">
+                                    {item.quantity}{item.unit || ""}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-500">{expense.payment_method}</td>
                       {/* 금액은 오른쪽 정렬 */}
                       <td className="px-4 py-3 text-sm text-right text-slate-900">

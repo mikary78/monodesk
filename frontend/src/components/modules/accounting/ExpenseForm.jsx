@@ -4,11 +4,14 @@
 // ============================================================
 
 import { useState, useEffect } from "react";
-import { X, Save, Receipt } from "lucide-react";
-import { createExpense, updateExpense, fetchCategories } from "../../../api/accountingApi";
+import { X, Save, Receipt, Plus, Package } from "lucide-react";
+import { createExpense, updateExpense, fetchCategories, fetchItemAutocomplete } from "../../../api/accountingApi";
 
 // 결제 수단 옵션 목록
 const PAYMENT_METHODS = ["카드", "현금", "계좌이체"];
+
+// 품목 수량 단위 목록
+const UNITS = ["kg", "g", "개", "병", "팩", "박스", "봉", "L", "ml", "인분", "마리"];
 
 /**
  * 지출 입력/수정 폼 컴포넌트.
@@ -30,29 +33,62 @@ const ExpenseForm = ({ initialData = null, onSuccess, onCancel }) => {
     tax_invoice: initialData?.tax_invoice || false,
   });
 
+  // 구매 품목 목록 상태
+  const [items, setItems] = useState(
+    (initialData?.items || []).map((item) => ({
+      item_name: item.item_name || "",
+      quantity: item.quantity ?? "",
+      unit: item.unit || "",
+      amount: item.amount ?? "",
+    }))
+  );
   // 지출 분류 목록 상태
   const [categories, setCategories] = useState([]);
+  // 품목명 자동완성 제안 목록
+  const [suggestions, setSuggestions] = useState([]);
   // 저장 중 여부 (버튼 비활성화용)
   const [isLoading, setIsLoading] = useState(false);
   // 에러 메시지 상태
   const [errors, setErrors] = useState({});
 
-  // 컴포넌트 로드 시 지출 분류 불러오기
+  // 컴포넌트 로드 시 지출 분류 + 품목 자동완성 목록 불러오기
   useEffect(() => {
-    const loadCategories = async () => {
+    const loadInit = async () => {
       try {
-        const data = await fetchCategories();
-        setCategories(data);
-        // 신규 입력 시 첫 번째 분류를 기본값으로 설정
-        if (!initialData && data.length > 0) {
-          setForm((prev) => ({ ...prev, category_id: data[0].id }));
+        const [cats, sugs] = await Promise.all([
+          fetchCategories(),
+          fetchItemAutocomplete(""),
+        ]);
+        setCategories(cats);
+        setSuggestions(sugs);
+        if (!initialData && cats.length > 0) {
+          setForm((prev) => ({ ...prev, category_id: cats[0].id }));
         }
       } catch (err) {
-        console.error("지출 분류 불러오기 실패:", err);
+        console.error("초기 데이터 불러오기 실패:", err);
       }
     };
-    loadCategories();
-  }, []);
+    loadInit();
+  }, []); // eslint-disable-line
+
+  /** 품목 추가 */
+  const handleAddItem = () => {
+    setItems((prev) => [...prev, { item_name: "", quantity: "", unit: "", amount: "" }]);
+  };
+
+  /** 품목 필드 값 변경 */
+  const updateItem = (idx, field, value) => {
+    setItems((prev) =>
+      prev.map((item, i) =>
+        i === idx ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  /** 품목 행 삭제 */
+  const removeItem = (idx) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   /** 입력 필드 변경 핸들러 (체크박스 포함) */
   const handleChange = (e) => {
@@ -87,11 +123,22 @@ const ExpenseForm = ({ initialData = null, onSuccess, onCancel }) => {
 
     setIsLoading(true);
     try {
+      // 빈 item_name은 제외하고, 숫자 필드 변환
+      const cleanedItems = items
+        .filter((item) => item.item_name.trim())
+        .map((item) => ({
+          item_name: item.item_name.trim(),
+          quantity: item.quantity !== "" && item.quantity !== null ? Number(item.quantity) : null,
+          unit: item.unit || null,
+          amount: item.amount !== "" && item.amount !== null ? Number(item.amount) : null,
+        }));
+
       const payload = {
         ...form,
         amount: Number(form.amount),
         vat: Number(form.vat) || 0,
         category_id: Number(form.category_id),
+        items: cleanedItems,
       };
 
       if (initialData) {
@@ -272,6 +319,88 @@ const ExpenseForm = ({ initialData = null, onSuccess, onCancel }) => {
             rows={2}
             className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           />
+        </div>
+
+        {/* 구매 품목 섹션 */}
+        <div className="border border-slate-200 rounded-md p-3 bg-slate-50">
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
+              <Package size={12} className="text-slate-400" />
+              구매 품목 <span className="text-slate-400 font-normal">(선택)</span>
+            </label>
+            <button
+              type="button"
+              onClick={handleAddItem}
+              className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1 transition-colors"
+            >
+              <Plus size={12} />
+              품목 추가
+            </button>
+          </div>
+
+          {items.length === 0 ? (
+            <p className="text-xs text-slate-400 py-1">
+              품목을 추가하면 "무엇을 샀는가"를 더 자세히 기록할 수 있습니다.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {/* 헤더 레이블 */}
+              <div className="grid grid-cols-[1fr_64px_72px_88px_24px] gap-1.5 text-xs text-slate-400 px-0.5">
+                <span>품목명</span>
+                <span className="text-right">수량</span>
+                <span className="text-center">단위</span>
+                <span className="text-right">금액(원)</span>
+                <span />
+              </div>
+              {items.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-[1fr_64px_72px_88px_24px] gap-1.5 items-center">
+                  <input
+                    list="item-name-suggestions"
+                    placeholder="예: 활전복"
+                    value={item.item_name}
+                    onChange={(e) => updateItem(idx, "item_name", e.target.value)}
+                    className="h-8 px-2 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={item.quantity}
+                    onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                    min="0"
+                    className="h-8 px-2 border border-slate-200 rounded text-sm text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <select
+                    value={item.unit}
+                    onChange={(e) => updateItem(idx, "unit", e.target.value)}
+                    className="h-8 px-1 border border-slate-200 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">단위</option>
+                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={item.amount}
+                    onChange={(e) => updateItem(idx, "amount", e.target.value)}
+                    min="0"
+                    className="h-8 px-2 border border-slate-200 rounded text-sm text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    className="text-slate-400 hover:text-red-500 transition-colors flex items-center justify-center"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 자동완성 datalist */}
+          <datalist id="item-name-suggestions">
+            {suggestions.map((s) => <option key={s} value={s} />)}
+          </datalist>
         </div>
 
         {/* 세금계산서 수취 여부 */}

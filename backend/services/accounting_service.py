@@ -6,14 +6,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, distinct
 from typing import List, Optional
-from models.accounting import ExpenseCategory, ExpenseRecord, SalesRecord
+from models.accounting import ExpenseCategory, ExpenseRecord, ExpenseItem, SalesRecord
 from models.operations import Vendor
 from models.sales_analysis import PosSalesRaw
 from schemas.accounting import (
     ExpenseCategoryCreate, ExpenseCategoryUpdate,
     ExpenseRecordCreate, ExpenseRecordUpdate,
     SalesRecordCreate, SalesRecordUpdate, ProfitLossResponse,
-    VendorStatItem
+    VendorStatItem, ExpenseItemCreate
 )
 
 
@@ -172,14 +172,23 @@ def create_expense(db: Session, data: ExpenseRecordCreate) -> ExpenseRecord:
     """
     새 지출 기록 생성.
     거래처명이 있으면 vendors 테이블에 자동 연동을 시도합니다.
+    구매 품목(items)이 있으면 expense_items 테이블에 저장합니다.
     """
-    expense = ExpenseRecord(**data.model_dump())
+    # items 필드를 분리하여 ExpenseRecord 모델 생성에서 제외
+    items_data = data.items
+    expense_dict = data.model_dump(exclude={"items"})
+    expense = ExpenseRecord(**expense_dict)
     db.add(expense)
+    db.flush()  # expense.id 확보 (commit 전)
+
+    # 구매 품목 저장
+    for item in items_data:
+        db_item = ExpenseItem(expense_id=expense.id, **item.model_dump())
+        db.add(db_item)
 
     # 거래처명이 있으면 분류명을 조회하여 vendors 자동 등록 시도
     if expense.vendor:
         try:
-            # 지출 분류명 조회 (vendor_category 매핑에 필요)
             category = db.query(ExpenseCategory).filter(
                 ExpenseCategory.id == expense.category_id,
                 ExpenseCategory.is_deleted == 0
@@ -198,18 +207,29 @@ def update_expense(db: Session, expense_id: int, data: ExpenseRecordUpdate) -> O
     """
     지출 기록 수정.
     거래처명이 변경된 경우 vendors 테이블 자동 연동을 시도합니다.
+    items가 전달된 경우 기존 품목을 삭제하고 새 품목으로 교체합니다.
     """
     expense = get_expense_by_id(db, expense_id)
     if not expense:
         return None
     update_data = data.model_dump(exclude_unset=True)
+
+    # items 분리 (ExpenseRecord 컬럼이 아님)
+    items_data = update_data.pop("items", None)
+
     for key, value in update_data.items():
         setattr(expense, key, value)
+
+    # items가 전달된 경우 기존 품목 삭제 후 새로 저장
+    if items_data is not None:
+        db.query(ExpenseItem).filter(ExpenseItem.expense_id == expense_id).delete()
+        for item in items_data:
+            db_item = ExpenseItem(expense_id=expense_id, **item)
+            db.add(db_item)
 
     # 거래처명이 수정된 경우 vendors 자동 연동 시도
     if "vendor" in update_data and update_data["vendor"]:
         try:
-            # 분류 ID가 수정됐을 수 있으므로 최신 category_id를 사용
             cat_id = update_data.get("category_id", expense.category_id)
             category = db.query(ExpenseCategory).filter(
                 ExpenseCategory.id == cat_id,
@@ -233,6 +253,21 @@ def delete_expense(db: Session, expense_id: int) -> bool:
     expense.is_deleted = 1
     db.commit()
     return True
+
+
+def get_item_name_suggestions(db: Session, q: str = "") -> List[str]:
+    """
+    품목명 자동완성 제안 목록 조회.
+    기존 expense_items에서 유니크한 품목명을 추출합니다.
+    """
+    query = db.query(distinct(ExpenseItem.item_name)).filter(
+        ExpenseItem.item_name.isnot(None),
+        ExpenseItem.item_name != ""
+    )
+    if q:
+        query = query.filter(ExpenseItem.item_name.ilike(f"%{q}%"))
+    results = query.order_by(ExpenseItem.item_name).limit(30).all()
+    return [row[0] for row in results]
 
 
 def get_vendor_stats(

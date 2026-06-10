@@ -66,6 +66,8 @@ class ExpenseRecord(Base):
 
     # 지출 분류와의 관계
     category = relationship("ExpenseCategory", back_populates="expense_records")
+    # 구매 품목 목록 (expense_items 테이블)
+    items = relationship("ExpenseItem", back_populates="expense", cascade="all, delete-orphan")
 
     @property
     def total_amount(self) -> float:
@@ -74,6 +76,33 @@ class ExpenseRecord(Base):
 
     def __repr__(self):
         return f"<ExpenseRecord(id={self.id}, date={self.expense_date}, amount={self.amount})>"
+
+
+class ExpenseItem(Base):
+    """
+    지출 품목 테이블.
+    지출 기록 1건에 복수의 구매 품목을 텍스트 태그로 저장합니다.
+    재고 연동 없이 "무엇을 샀는가" 파악용 자유 입력 태그입니다.
+    """
+    __tablename__ = "expense_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # 지출 기록 외래키 (삭제 시 연쇄 삭제)
+    expense_id = Column(Integer, ForeignKey("expense_records.id", ondelete="CASCADE"), nullable=False, index=True, comment="지출 기록 ID")
+    # 품목명 (자유 입력)
+    item_name = Column(String(100), nullable=False, comment="품목명 (예: 활전복, 굴, 소주)")
+    # 수량 (선택)
+    quantity = Column(Float, nullable=True, comment="수량")
+    # 단위 (선택: kg/g/개/병/팩 등)
+    unit = Column(String(20), nullable=True, comment="단위 (kg/g/개/병 등)")
+    # 품목별 금액 (선택)
+    amount = Column(Float, nullable=True, comment="품목 금액 (원)")
+    created_at = Column(DateTime, default=datetime.utcnow, comment="생성일시")
+
+    expense = relationship("ExpenseRecord", back_populates="items")
+
+    def __repr__(self):
+        return f"<ExpenseItem(id={self.id}, expense_id={self.expense_id}, name={self.item_name})>"
 
 
 class SalesRecord(Base):

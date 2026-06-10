@@ -5,7 +5,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from database import get_db
 from schemas.accounting import (
     ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCategoryResponse,
@@ -141,6 +141,16 @@ def update_expense(
     if not result:
         raise HTTPException(status_code=404, detail="해당 지출 기록을 찾을 수 없습니다.")
     return result
+
+
+@router.get("/expense-items/autocomplete", response_model=List[str])
+def get_expense_item_autocomplete(
+    q: str = Query("", description="품목명 검색 키워드"),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    """품목명 자동완성 — 기존 expense_items에서 유니크한 품목명 목록 반환"""
+    return service.get_item_name_suggestions(db, q)
 
 
 @router.delete("/expenses/{expense_id}")

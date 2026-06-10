@@ -155,6 +155,21 @@ export async function fetchVendorStats(year, month = null) {
 }
 
 // ─────────────────────────────────────────
+// 지출 품목 자동완성 API
+// ─────────────────────────────────────────
+
+/**
+ * 품목명 자동완성 제안 목록 조회.
+ * 기존 expense_items에서 유니크한 품목명을 반환합니다.
+ * @param {string} q - 검색 키워드 (빈 문자열이면 전체 목록)
+ * @returns {Promise<string[]>} 품목명 배열
+ */
+export async function fetchItemAutocomplete(q = "") {
+  const params = new URLSearchParams({ q });
+  return request(`${BASE_URL}/expense-items/autocomplete?${params}`);
+}
+
+// ─────────────────────────────────────────
 // 유틸리티 함수
 // ─────────────────────────────────────────
 
