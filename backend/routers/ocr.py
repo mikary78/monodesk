@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from schemas.ocr import OcrScanResponse, OcrItemResult, OcrConfirmRequest, OcrConfirmResponse
-from models.accounting import ExpenseRecord, ExpenseCategory
+from models.accounting import ExpenseRecord, ExpenseCategory, ExpenseItem
 from models.inventory import InventoryItem, InventoryAdjustment, PurchaseOrder, PurchaseOrderItem
 
 import services.ocr_service as ocr_service
@@ -272,7 +272,21 @@ def confirm_receipt(
     db.add(expense)
     db.flush()  # expense.id 할당을 위한 flush
 
-    # ── 3. 재고 반영 품목 필터링 ──────────────────────────────
+    # ── 3. 품목 태그 저장 (expense_items) ─────────────────────
+    # OCR로 인식된 모든 품목을 expense_items에 저장합니다.
+    # 재고 반영 여부와 무관하게 "무엇을 샀는가"를 기록합니다.
+    for item in data.items:
+        if item.name and item.name.strip():
+            db_item = ExpenseItem(
+                expense_id=expense.id,
+                item_name=item.name.strip(),
+                quantity=item.quantity if item.quantity and item.quantity > 0 else None,
+                unit=item.unit if item.unit and item.unit.strip() else None,
+                amount=item.amount if item.amount and item.amount > 0 else None,
+            )
+            db.add(db_item)
+
+    # ── 4. 재고 반영 품목 필터링 ──────────────────────────────
     inventory_items_to_process = [
         item for item in data.items
         if item.apply_to_inventory and item.matched_inventory_id is not None
@@ -282,7 +296,7 @@ def confirm_receipt(
     inventory_updated_count = 0
 
     if inventory_items_to_process:
-        # ── 4. 발주서 생성 (입고 기록) ────────────────────────
+        # ── 5. 발주서 생성 (입고 기록) ────────────────────────
         order_number = _generate_order_number(db)
         purchase_order = PurchaseOrder(
             order_number=order_number,
@@ -297,7 +311,7 @@ def confirm_receipt(
         db.add(purchase_order)
         db.flush()  # purchase_order.id 할당을 위한 flush
 
-        # ── 5. 발주 품목 및 재고 조정 처리 ────────────────────
+        # ── 6. 발주 품목 및 재고 조정 처리 ────────────────────
         for item in inventory_items_to_process:
             # 재고 품목 조회
             inv_item = db.query(InventoryItem).filter(
@@ -345,7 +359,7 @@ def confirm_receipt(
 
             inventory_updated_count += 1
 
-    # ── 6. 전체 트랜잭션 커밋 ──────────────────────────────────
+    # ── 7. 전체 트랜잭션 커밋 ──────────────────────────────────
     try:
         db.commit()
     except Exception as e:
@@ -356,7 +370,7 @@ def confirm_receipt(
             detail=f"저장 중 오류가 발생했습니다: {str(e)}"
         )
 
-    # ── 7. 응답 구성 ──────────────────────────────────────────
+    # ── 8. 응답 구성 ──────────────────────────────────────────
     message_parts = [f"지출 기록이 등록되었습니다. (지출 ID: {expense.id})"]
     if purchase_order:
         message_parts.append(f"발주/입고 기록이 생성되었습니다. (발주번호: {purchase_order.order_number})")

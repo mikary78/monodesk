@@ -75,35 +75,40 @@ def _detect_media_type(image_path: str) -> str:
 
 # Claude에게 전달하는 영수증 파싱 프롬프트
 # JSON 외 텍스트를 일절 포함하지 않도록 강하게 지시합니다.
-RECEIPT_PROMPT = """이 영수증 이미지에서 정보를 추출해서 반드시 아래 JSON 형식으로만 응답해줘.
+RECEIPT_PROMPT = """이 이미지는 한국 식당/수산물/식자재 거래처의 영수증 또는 거래명세서입니다.
+이미지에서 정보를 추출해서 반드시 아래 JSON 형식으로만 응답해줘.
 JSON 외의 다른 텍스트는 절대 포함하지 마. 코드블록(```)도 사용하지 마.
 
 {
-  "vendor_name": "업체명 (없으면 null)",
+  "vendor_name": "업체명 또는 거래처명 (없으면 null)",
   "business_number": "사업자번호 (없으면 null)",
   "receipt_date": "YYYY-MM-DD 형식 날짜 (없으면 null)",
   "receipt_time": "HH:MM 형식 시간 (없으면 null)",
   "total_amount": 숫자만 (원 단위, 없으면 0),
   "vat_amount": 숫자만 (부가세, 없으면 0),
-  "supply_amount": 숫자만 (공급가액, 없으면 0),
+  "supply_amount": 숫자만 (공급가액/세전금액, 없으면 0),
   "payment_method": "카드 또는 현금 또는 계좌이체 또는 기타",
   "card_number": "카드 끝 4자리 (없으면 null)",
   "items": [
     {
-      "name": "품목명",
-      "quantity": 숫자,
-      "unit_price": 숫자,
-      "amount": 숫자
+      "name": "품목명 (예: 활전복, 굴, 소주, 맥주 등)",
+      "quantity": 숫자 (수량, 없으면 1),
+      "unit": "단위 (예: kg, g, 개, 병, 팩, 박스, 마리, L — 없으면 개)",
+      "unit_price": 숫자 (단가, 없으면 0),
+      "amount": 숫자 (소계=수량×단가, 없으면 0)
     }
   ],
   "memo": "기타 특이사항 (없으면 null)"
 }
 
 규칙:
-- 날짜는 반드시 YYYY-MM-DD 형식으로 변환
+- 날짜는 반드시 YYYY-MM-DD 형식으로 변환 (예: 2026년 6월 → 2026-06-18)
 - 금액은 반드시 숫자만 (콤마, 원 기호, 공백 제외)
+- 거래명세서의 경우 품목 목록을 모두 items에 포함
+- 수량 단위(kg, g, 마리, 박스 등)가 보이면 반드시 unit 필드에 기입
 - 품목이 없으면 items는 빈 배열 []
 - 확실하지 않은 값은 null로 표시
+- total_amount는 실제 지불한 총액 (부가세 포함)
 """
 
 
@@ -148,11 +153,11 @@ def extract_receipt_data(image_path: str) -> dict:
         logger.info(f"감지된 미디어 타입: {media_type} ({image_path})")
 
         # Claude Vision API 호출
-        # max_tokens=1024: 영수증 JSON 응답에 충분한 토큰 수
+        # max_tokens=2048: 거래명세서 품목이 많을 경우를 대비해 여유 있게 설정
         client = _get_client()
         message = client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[
                 {
                     "role": "user",
